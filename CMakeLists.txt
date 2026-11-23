@@ -7,6 +7,7 @@ project(sqlitexx
 )
 
 option(SQLITEXX_BUILD_TESTS "Build the sqlitexx tests" ${PROJECT_IS_TOP_LEVEL})
+option(SQLITEXX_BUILD_EXAMPLES "Build the sqlitexx examples (and run them as tests)" ${PROJECT_IS_TOP_LEVEL})
 option(SQLITEXX_WARNINGS_AS_ERRORS "Treat warnings in sqlitexx and its tests as errors (CI turns this on)" OFF)
 
 # Compile options for sqlitexx's own code (not for SQLite)
@@ -198,9 +199,16 @@ if(MSVC)
     target_compile_options(sqlitexx PUBLIC /Zc:__cplusplus)
 endif()
 
-# --- Tests ------------------------------------------------------------------------------------------------------------
+# --- Tests and examples -----------------------------------------------------------------------------------------------
+
+if(SQLITEXX_BUILD_TESTS OR SQLITEXX_BUILD_EXAMPLES)
+    enable_testing()
+endif()
 
 if(SQLITEXX_BUILD_TESTS)
-    enable_testing()
     add_subdirectory(tests)
+endif()
+
+if(SQLITEXX_BUILD_EXAMPLES)
+    add_subdirectory(examples)
 endif()
