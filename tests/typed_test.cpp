@@ -11,6 +11,7 @@
 
 #include <cstdint>
 #include <cstring>
+#include <initializer_list>
 #include <limits>
 #include <string>
 #include <tuple>
@@ -359,6 +360,47 @@ void test_extended_codes()
                                          );
     CHECK(numbered && *numbered == "needs a name");
 }
+
+void test_columns_by_name()
+{
+    database db = open_users();
+    expected<statement> select =
+        db.prepare("SELECT id, name AS Name, age, 1 AS twice, 2 AS twice FROM user ORDER BY id");
+    CHECK(select.has_value());
+    if (!select)
+    {
+        return;
+    }
+    CHECK(select->step().has_value());
+
+    // Names compare like SQL identifiers: ASCII letters in either case
+    expected<std::string> name = select->column<std::string>("name");
+    CHECK(name && *name == "Alice");
+    expected<int> age = select->column<int>(std::string("AGE"));
+    CHECK(age && *age == 31);
+    expected<int> index = select->column_index(string_view("Age"));
+    CHECK(index && *index == 2);
+
+    // A repeated name gives the first column with it
+    expected<int> twice = select->column<int>("twice");
+    CHECK(twice && *twice == 1);
+
+    // Only whole names match
+    for (const char* missing : {"nam", "names", "", "user.name"})
+    {
+        expected<int> none = select->column_index(missing);
+        CHECK(!none && none.error().primary() == primary_code::range);
+        CHECK(!none && none.error().message() == std::string("the statement has no column named ") + missing);
+    }
+
+    // Reading by index still works, and a NULL column's error names the column
+    expected<std::int64_t> id = select->column<std::int64_t>(0);
+    CHECK(id && *id == 1);
+    CHECK(select->step().has_value());
+    expected<int> null_age = select->column<int>("age");
+    CHECK(!null_age && null_age.error().primary() == primary_code::mismatch);
+    CHECK(!null_age && null_age.error().message().find("column 2 (age) is NULL") == 0);
+}
 } // anonymous
 
 int main()
@@ -373,6 +415,7 @@ int main()
     test_errors_carry_codes_and_messages();
     test_chaining();
     test_extended_codes();
+    test_columns_by_name();
 
     return test::summary();
 }

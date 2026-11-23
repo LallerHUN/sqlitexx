@@ -231,6 +231,26 @@ auto added = db.prepare("INSERT INTO user(name) VALUES(?)")
 | `execute_with(args...)` | `and_then` | binds `args` and runs the statement to completion |
 | `on(code, handler)` | `or_else` | handles errors with that code |
 
+### Columns by name
+
+`statement::column<T>(index)` reads one column of the current row. `column<T>(name)` reads it by name, and
+`column_index(name)` gives the index:
+
+```cpp
+sql::expected<sql::statement> select = db.prepare("SELECT name, count(*) AS orders FROM purchase GROUP BY name");
+while (select && select->step().value_or(false))
+{
+    sql::expected<std::string> name = select->column<std::string>("name");
+    sql::expected<int> orders = select->column<int>("orders");
+}
+```
+
+- A column's name is its `AS` alias, or else what SQLite makes of the expression, so give computed columns an alias.
+- Names compare like SQL identifiers: `"name"` finds a column called `Name`. With a repeated name, the first column
+  wins.
+- No column by that name is a `range` error.
+- Each call searches the columns. In a loop over many rows, call `column_index()` once and read by index.
+
 ### Rows as a range
 
 `statement::rows<T...>()` gives the rows of a query for a range-based `for` loop. Each element is an
