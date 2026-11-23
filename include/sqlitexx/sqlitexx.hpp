@@ -3,6 +3,7 @@
 
 // Everything sqlitexx offers. Include this, or the individual headers.
 
+#include "sqlitexx/backup.hpp"
 #include "sqlitexx/chain.hpp"
 #include "sqlitexx/config.hpp"
 #include "sqlitexx/cstring_view.hpp"
@@ -10,6 +11,7 @@
 #include "sqlitexx/error.hpp"
 #include "sqlitexx/expected.hpp"
 #include "sqlitexx/function.hpp"
+#include "sqlitexx/native/backup.hpp"
 #include "sqlitexx/native/connection.hpp"
 #include "sqlitexx/native/context.hpp"
 #include "sqlitexx/native/extended_code.hpp"

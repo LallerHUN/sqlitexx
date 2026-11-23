@@ -1,4 +1,5 @@
 foreach(test_name
+    backup_test
     busy_timeout_test
     cstring_view_test
     function_test

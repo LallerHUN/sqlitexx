@@ -168,6 +168,34 @@ void test_constraint_is_extended()
     CHECK(db.extended_errcode() == rc);
 }
 
+void test_backup()
+{
+    connection source;
+    connection destination;
+    CHECK(source.open(":memory:").ok());
+    CHECK(destination.open(":memory:").ok());
+    CHECK(source.exec("CREATE TABLE t(v); INSERT INTO t VALUES(1), (2)").ok());
+
+    backup copy;
+    CHECK(!copy);
+    CHECK(copy.init(destination, "main", source, "main").ok());
+    CHECK(static_cast<bool>(copy));
+    CHECK(copy.step(-1).done());
+    CHECK(copy.remaining() == 0 && copy.pagecount() > 0);
+    CHECK(copy.finish().ok());
+    CHECK(!copy);
+
+    statement count;
+    CHECK(destination.prepare("SELECT count(*) FROM t", count).ok());
+    CHECK(count.step().row() && count.column_int(0) == 2);
+
+    // A failed init holds nothing; the destination has the message
+    const result failed = copy.init(destination, "main", source, "nowhere");
+    CHECK(failed == primary_code::error);
+    CHECK(!copy);
+    CHECK(std::strstr(destination.errmsg(), "nowhere") != nullptr);
+}
+
 void test_moves_and_statement_outliving_connection()
 {
     statement stmt;
@@ -200,6 +228,7 @@ int main()
     test_prepare_errors_and_tail();
     test_constraint_is_extended();
     test_moves_and_statement_outliving_connection();
+    test_backup();
 
     return test::summary();
 }
