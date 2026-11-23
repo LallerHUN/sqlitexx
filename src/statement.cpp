@@ -5,6 +5,31 @@
 
 namespace sqlitexx
 {
+namespace
+{
+    char ascii_lower(char c) noexcept
+    {
+        return c >= 'A' && c <= 'Z' ? static_cast<char>(c - 'A' + 'a') : c;
+    }
+
+    // SQL identifiers match regardless of the case of ASCII letters (other characters must be equal)
+    bool same_identifier(
+        string_view name,
+        const char* column
+    ) noexcept
+    {
+        for (const char c : name)
+        {
+            if (*column == '\0' || ascii_lower(c) != ascii_lower(*column))
+            {
+                return false;
+            }
+            ++column;
+        }
+        return *column == '\0';
+    }
+} // anonymous
+
 statement::statement(native::statement&& prepared) noexcept
     : stmt(std::move(prepared))
 {
@@ -27,6 +52,27 @@ expected<bool> statement::step()
 expected<void> statement::reset()
 {
     return check(stmt.reset());
+}
+
+expected<int> statement::column_index(string_view name) const
+{
+    const int count = stmt.column_count();
+    for (int index = 0; index < count; ++index)
+    {
+        const char* column = stmt.column_name(index);
+        if (column == nullptr)
+        {
+            return expected<int>(
+                unexpect,
+                error(native::result(SQLITE_NOMEM), "out of memory reading the name of column " + std::to_string(index))
+            );
+        }
+        if (same_identifier(name, column))
+        {
+            return index;
+        }
+    }
+    return expected<int>(unexpect, no_column(name));
 }
 
 native::statement& statement::native_statement() noexcept
@@ -55,11 +101,21 @@ error statement::no_parameter(const char* name) const
     return error(native::result(SQLITE_RANGE), std::string("the statement has no parameter named ") + name);
 }
 
-error statement::null_column(int index) const
+error statement::no_column(string_view name) const
 {
     return error(
+        native::result(SQLITE_RANGE),
+        "the statement has no column named " + std::string(name.data(), name.size())
+    );
+}
+
+error statement::null_column(int index) const
+{
+    const char* name = stmt.column_name(index);
+    const std::string column = name == nullptr ? std::to_string(index) : std::to_string(index) + " (" + name + ")";
+    return error(
         native::result(SQLITE_MISMATCH),
-        "column " + std::to_string(index) + " is NULL; read it as an optional to accept NULL"
+        "column " + column + " is NULL; read it as an optional to accept NULL"
     );
 }
 
