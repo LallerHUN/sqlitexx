@@ -8,6 +8,7 @@
 #include "sqlitexx/native/flags.hpp"
 #include "sqlitexx/statement.hpp"
 
+#include <chrono>
 #include <cstdint>
 
 namespace sqlitexx
@@ -40,6 +41,12 @@ public:
     // State
     std::int64_t last_insert_rowid() const noexcept;
     std::int64_t changes() const noexcept;
+
+    // Settings. When another connection holds a lock, retry for up to `timeout` before a statement fails with
+    // primary_code::busy. Zero or less turns waiting off, as it is when a database opens. A timeout longer than SQLite
+    // takes (INT_MAX milliseconds, about 24.8 days) waits that long. Coarser durations convert:
+    // std::chrono::seconds(5).
+    expected<void> busy_timeout(std::chrono::milliseconds timeout);
 
     // The native connection underneath, for what the typed layer does not cover
     native::connection& native_connection() noexcept;

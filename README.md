@@ -294,6 +294,17 @@ out of scope unless `commit()` succeeded. `mode` is `transaction_mode::deferred`
 is after a deferred constraint violation or `SQLITE_BUSY`, so you can fix the data or retry, while some other errors
 make SQLite roll back on its own. A transaction must not outlive its database.
 
+### Waiting for locks
+
+When another connection holds a lock, a statement fails with `primary_code::busy` at once. `busy_timeout()` makes it
+retry for a while first:
+
+```cpp
+db.busy_timeout(std::chrono::seconds(5));
+```
+
+Zero turns waiting off again, as it is when a database opens.
+
 ### Standard types or backports
 
 `sqlitexx::expected` is `std::expected` or expected-lite's, depending on `SQLITEXX_EXPECTED`, and
