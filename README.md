@@ -244,13 +244,8 @@ never throw. Differences from the C API:
 
 ## Contributing
 
-- Formatting is [.clang-format](.clang-format), checked in CI with clang-format 22.1.3, the version Visual Studio
-  2026 ships. Run it before committing.
-- Within each `public`, `protected` and `private` section of a class, put types, constants and data members first,
-  then the functions, grouped by what they do. clang-format can't check this one.
-- Library code stays free of C++17-only features that have no simple C++11 replacement: support for C++11 and C++14 is
-  planned.
-- CI builds with warnings as errors on MSVC, GCC and Clang, runs the tests with sanitizers, and checks the formatting.
+Contributions are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) covers building and testing, the code rules that
+clang-format can't check, and how pull requests get in.
 
 ## License
 
