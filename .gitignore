@@ -30,3 +30,9 @@
 *.exe
 *.out
 *.app
+
+# Build trees and IDE state
+/build*/
+/out/
+/.vs/
+CMakeUserPresets.json

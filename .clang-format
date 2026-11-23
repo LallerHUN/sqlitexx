@@ -1,0 +1,76 @@
+# sqlitexx code style. Needs clang-format 20 or newer.
+#
+# The layout should not depend on the length of names: renaming something must not re-indent its neighbours. So long
+# lists break right after the opening bracket, one item per line, the closing bracket on its own line, and nothing is
+# aligned into columns.
+---
+Language: Cpp
+BasedOnStyle: LLVM
+Standard: Latest
+
+ColumnLimit: 120
+IndentWidth: 4
+ContinuationIndentWidth: 4
+UseTab: Never
+MaxEmptyLinesToKeep: 1
+KeepEmptyLines:
+  AtStartOfBlock: false
+  AtStartOfFile: false
+
+# Braces: Allman, and always present (also around single-statement bodies)
+BreakBeforeBraces: Allman
+InsertBraces: true
+AllowShortBlocksOnASingleLine: Never
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortEnumsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: None
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLambdasOnASingleLine: Empty
+AllowShortLoopsOnASingleLine: false
+
+# Namespaces: `namespace a { namespace b {` with only the innermost one indented; closing comments as written
+NamespaceIndentation: Inner
+CompactNamespaces: false
+FixNamespaceComments: false
+IndentExternBlock: Indent
+
+# Classes
+AccessModifierOffset: -4
+EmptyLineBeforeAccessModifier: LogicalBlock
+BreakConstructorInitializers: BeforeColon
+PackConstructorInitializers: Never
+ConstructorInitializerIndentWidth: 4
+BreakInheritanceList: BeforeColon
+
+# Lists: break after the bracket, one item per line, closing bracket on its own line
+AlignAfterOpenBracket: BlockIndent
+# Declarations with more than one parameter always break, even when they fit, so every function reads the same way
+BinPackParameters: AlwaysOnePerLine
+BinPackArguments: false
+AllowAllParametersOfDeclarationOnNextLine: false
+AllowAllArgumentsOnNextLine: false
+BreakBeforeBinaryOperators: NonAssignment
+
+# No columns that depend on name length
+AlignOperands: DontAlign
+AlignEscapedNewlines: DontAlign
+AlignTrailingComments:
+  Kind: Never
+AlignConsecutiveAssignments: None
+AlignConsecutiveDeclarations: None
+AlignConsecutiveMacros: None
+
+# Declarations
+PointerAlignment: Left
+ReferenceAlignment: Pointer
+BreakTemplateDeclarations: Yes
+BreakAfterReturnType: None
+# Break after the opening bracket rather than after the return type
+PenaltyReturnTypeOnItsOwnLine: 1000
+
+# Includes: keep the blocks as written (own header, project headers, standard headers), sort inside each
+SortIncludes: CaseSensitive
+IncludeBlocks: Preserve
+
+ReflowComments: true
+...
