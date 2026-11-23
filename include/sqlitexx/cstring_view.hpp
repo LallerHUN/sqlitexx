@@ -203,6 +203,11 @@ private:
 
 using cstring_view = basic_cstring_view<char>;
 using u16cstring_view = basic_cstring_view<char16_t>;
+
+#if defined(__cpp_char8_t) && defined(__cpp_lib_char8_t)
+// UTF-8 text as char8_t (C++20)
+using u8cstring_view = basic_cstring_view<char8_t>;
+#endif
 } // sqlitexx
 
 #endif // SQLITEXX_CSTRING_VIEW_HPP
