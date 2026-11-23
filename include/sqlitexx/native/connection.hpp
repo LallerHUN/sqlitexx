@@ -52,7 +52,8 @@ namespace native
         explicit operator bool() const noexcept;
 
         // Statements. prepare() finalizes whatever `out` held. When `sql` holds only whitespace or comments, the
-        // result is ok and `out` stays empty. `tail` receives the unused rest of `sql`.
+        // result is ok and `out` stays empty. `tail` receives the unused rest of `sql`: a view into `sql`, so it is
+        // only null-terminated when `sql` is.
         result prepare(
             string_view sql,
             statement& out,

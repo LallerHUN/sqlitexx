@@ -175,6 +175,7 @@ For an offline build, unpack the dependencies yourself and point CMake at them w
 | `bool` | 0 or 1 | non-zero is `true` |
 | `float`, `double` | as a double | |
 | `std::string`, `string_view` | as text | a `string_view` points into SQLite's memory until the next step |
+| `cstring_view` | as text | like `string_view`, and always followed by a `'\0'`, so `c_str()` can go to C functions |
 | `const char*` | as text, or NULL for `nullptr` | not readable |
 | `nullptr` | NULL | not readable |
 | `sqlitexx::blob` (`std::vector<unsigned char>`) | as a blob | |
@@ -192,6 +193,7 @@ too, so one kind of check covers both:
 |---|---|
 | `done` | `first()` found no row |
 | `mismatch` | NULL read into a non-optional type, or an integer that doesn't fit |
+| `nomem` | SQLite ran out of memory converting a column to text |
 | `misuse` | `prepare()` was given no SQL statement, or more than one |
 
 `sqlitexx::on(code, handler)` handles one kind of error inside `or_else` and passes every other error on unchanged.
@@ -248,8 +250,9 @@ never throw. Differences from the C API:
 
 - Connections close with `sqlite3_close_v2`, so statements may outlive their connection.
 - Extended result codes are always on.
-- Text and blobs go in and out as `string_view` and pointer plus size; an empty `string_view` binds an empty text,
-  not NULL.
+- Text goes in as `string_view` and blobs as pointer plus size; an empty `string_view` binds an empty text, not NULL.
+- Text comes out as `optional<cstring_view>`: `nullopt` where SQLite returns a NULL pointer (a NULL value, or out of
+  memory), and otherwise a view that is always followed by a `'\0'`, so an empty string is never mistaken for NULL.
 - The public headers don't include `sqlite3.h`.
 
 ## Contributing
