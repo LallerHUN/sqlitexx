@@ -1,5 +1,11 @@
 // Tests for the typed layer: database, statement, value traits and the chaining helpers.
 
+// sqlitexx must compile after <windows.h> without NOMINMAX, whose min and max macros break unguarded calls such as
+// std::numeric_limits<T>::max(). User code includes it first often enough.
+#if defined(_WIN32)
+#include <windows.h>
+#endif
+
 #include "check.hpp"
 #include "sqlitexx/sqlitexx.hpp"
 
@@ -118,7 +124,7 @@ void test_integer_ranges()
 
     expected<statement> bind = db.prepare("SELECT ?");
     CHECK(bind.has_value());
-    expected<void> too_big = bind->bind(std::numeric_limits<std::uint64_t>::max());
+    expected<void> too_big = bind->bind((std::numeric_limits<std::uint64_t>::max)());
     CHECK(!too_big.has_value());
     CHECK(!too_big && too_big.error().primary() == primary_code::mismatch);
 }
