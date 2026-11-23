@@ -45,6 +45,15 @@ else()
     endif()
 endif()
 
+# --- Dependencies -----------------------------------------------------------------------------------------------------
+
+include(FetchContent)
+
+if(POLICY CMP0135)
+    # Extracted files get the extraction time, so a new download rebuilds what depends on it
+    cmake_policy(SET CMP0135 NEW)
+endif()
+
 # --- SQLite -----------------------------------------------------------------------------------------------------------
 #
 # By default the pinned SQLite amalgamation is downloaded (checked against its SHA3-256 hash) and built as a static
@@ -69,13 +78,6 @@ if(SQLITEXX_USE_SYSTEM_SQLITE)
     endif()
     message(STATUS "sqlitexx: using the installed SQLite ${SQLite3_VERSION}")
 else()
-    include(FetchContent)
-
-    if(POLICY CMP0135)
-        # Extracted files get the extraction time, so a new download rebuilds what depends on it
-        cmake_policy(SET CMP0135 NEW)
-    endif()
-
     FetchContent_Declare(sqlite3
         URL https://sqlite.org/2026/sqlite-amalgamation-3540100.zip
         URL_HASH SHA3_256=92281c86e2957f9b9305890f9ac04204caa7b677cc868dc326d942689df28e30
@@ -94,16 +96,93 @@ else()
     message(STATUS "sqlitexx: building SQLite 3.54.1 from the amalgamation")
 endif()
 
+# --- expected ---------------------------------------------------------------------------------------------------------
+#
+# The typed API returns expected<T, error>: std::expected from C++23, expected-lite before it. The choice is made here,
+# once, and handed to everything that links sqlitexx as a compile definition. Letting each translation unit pick for
+# itself would give one class two different definitions in one program (an ODR violation) whenever the library and
+# its users are compiled with different C++ standards.
+#
+#   AUTO  std::expected when CMAKE_CXX_STANDARD is 23 or newer and the standard library has it, expected-lite otherwise
+#   STD   std::expected; sqlitexx and everything linking it then need C++23
+#   LITE  expected-lite, whatever the standard
+
+set(SQLITEXX_EXPECTED "AUTO" CACHE STRING "expected<T, E> for the typed API: AUTO, STD or LITE")
+set_property(CACHE SQLITEXX_EXPECTED PROPERTY STRINGS AUTO STD LITE)
+
+option(SQLITEXX_USE_SYSTEM_EXPECTED_LITE "Use an installed expected-lite (find_package) instead of the pinned one" OFF)
+
+set(sqlitexx_expected "${SQLITEXX_EXPECTED}")
+if(sqlitexx_expected STREQUAL "AUTO")
+    set(sqlitexx_expected LITE)
+    if(DEFINED CMAKE_CXX_STANDARD AND CMAKE_CXX_STANDARD GREATER_EQUAL 23 AND NOT CMAKE_CXX_STANDARD EQUAL 98)
+        include(CheckCXXSourceCompiles)
+        check_cxx_source_compiles([[
+            #include <expected>
+            #if !defined(__cpp_lib_expected) || __cpp_lib_expected < 202211L
+            #error "no std::expected with monadic operations"
+            #endif
+            int main() { return 0; }
+        ]] SQLITEXX_HAVE_STD_EXPECTED)
+        if(SQLITEXX_HAVE_STD_EXPECTED)
+            set(sqlitexx_expected STD)
+        endif()
+    endif()
+endif()
+
+if(sqlitexx_expected STREQUAL "STD")
+    set(sqlitexx_expected_definitions SQLITEXX_USE_STD_EXPECTED=1)
+    set(sqlitexx_expected_feature cxx_std_23)
+    set(sqlitexx_expected_target "")
+    message(STATUS "sqlitexx: expected is std::expected")
+elseif(sqlitexx_expected STREQUAL "LITE")
+    # nsel_CONFIG_SELECT_EXPECTED keeps nonstd::expected a class of its own: expected-lite would otherwise turn it into
+    # std::expected in translation units compiled as C++23.
+    set(sqlitexx_expected_definitions
+        SQLITEXX_USE_STD_EXPECTED=0
+        nsel_CONFIG_SELECT_EXPECTED=nsel_EXPECTED_NONSTD
+    )
+    set(sqlitexx_expected_feature cxx_std_17)
+
+    if(SQLITEXX_USE_SYSTEM_EXPECTED_LITE)
+        find_package(expected-lite CONFIG REQUIRED)
+        set(sqlitexx_expected_target nonstd::expected-lite)
+        message(STATUS "sqlitexx: expected is the installed expected-lite ${expected-lite_VERSION}")
+    else()
+        # SOURCE_SUBDIR names a directory that does not exist, so only the header is used and expected-lite's own
+        # CMake project (its tests and install rules) stays out of this build.
+        FetchContent_Declare(expected_lite
+            URL https://github.com/nonstd-lite/expected-lite/archive/refs/tags/v0.10.0.tar.gz
+            URL_HASH SHA256=cfe082e4ffedeeedac47763504102646a39c080599c7c1fe99299d6a1f99af92
+            SOURCE_SUBDIR do-not-add
+        )
+        FetchContent_MakeAvailable(expected_lite)
+
+        add_library(sqlitexx_expected_lite INTERFACE)
+        target_include_directories(sqlitexx_expected_lite SYSTEM INTERFACE
+            "$<BUILD_INTERFACE:${expected_lite_SOURCE_DIR}/include>"
+        )
+        set(sqlitexx_expected_target sqlitexx_expected_lite)
+        message(STATUS "sqlitexx: expected is expected-lite 0.10.0")
+    endif()
+else()
+    message(FATAL_ERROR "SQLITEXX_EXPECTED must be AUTO, STD or LITE, not '${SQLITEXX_EXPECTED}'")
+endif()
+
 # --- sqlitexx ---------------------------------------------------------------------------------------------------------
 
 add_library(sqlitexx STATIC
+    src/database.cpp
     src/native/connection.cpp
     src/native/result.cpp
     src/native/statement.cpp
+    src/statement.cpp
 )
 add_library(sqlitexx::sqlitexx ALIAS sqlitexx)
 
-target_compile_features(sqlitexx PUBLIC cxx_std_17)
+target_compile_features(sqlitexx PUBLIC ${sqlitexx_expected_feature})
+target_compile_definitions(sqlitexx PUBLIC ${sqlitexx_expected_definitions})
+target_link_libraries(sqlitexx PUBLIC ${sqlitexx_expected_target})
 set_target_properties(sqlitexx PROPERTIES CXX_EXTENSIONS OFF)
 
 target_include_directories(sqlitexx

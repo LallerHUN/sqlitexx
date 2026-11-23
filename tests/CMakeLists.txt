@@ -1,5 +1,7 @@
-add_executable(sqlitexx_native_test native_test.cpp)
-target_link_libraries(sqlitexx_native_test PRIVATE sqlitexx::sqlitexx)
-target_compile_options(sqlitexx_native_test PRIVATE ${SQLITEXX_COMPILE_OPTIONS})
+foreach(test_name native_test typed_test)
+    add_executable(sqlitexx_${test_name} ${test_name}.cpp check.hpp)
+    target_link_libraries(sqlitexx_${test_name} PRIVATE sqlitexx::sqlitexx)
+    target_compile_options(sqlitexx_${test_name} PRIVATE ${SQLITEXX_COMPILE_OPTIONS})
 
-add_test(NAME sqlitexx_native_test COMMAND sqlitexx_native_test)
+    add_test(NAME sqlitexx_${test_name} COMMAND sqlitexx_${test_name})
+endforeach()

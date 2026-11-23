@@ -1,33 +1,14 @@
-// Tests for the native layer. Plain asserts that stay on in release builds; a real test framework comes later.
+// Tests for the native layer.
 
+#include "check.hpp"
 #include "sqlitexx/sqlitexx.hpp"
 
-#include <cstdio>
 #include <cstring>
 #include <utility>
 
-namespace
-{
-int g_failures = 0;
-
-void check(
-    bool condition,
-    const char* expression,
-    int line
-)
-{
-    if (!condition)
-    {
-        std::printf("FAILED line %d: %s\n", line, expression);
-        ++g_failures;
-    }
-}
-} // anonymous
-
-#define CHECK(expression) check((expression), #expression, __LINE__)
-
-using namespace sqlitexx;
 using namespace sqlitexx::native;
+using sqlitexx::string_view;
+using sqlitexx::u16string_view;
 
 namespace
 {
@@ -179,11 +160,5 @@ int main()
     test_constraint_is_extended();
     test_moves_and_statement_outliving_connection();
 
-    if (g_failures != 0)
-    {
-        std::printf("%d check(s) failed\n", g_failures);
-        return 1;
-    }
-    std::printf("all checks passed\n");
-    return 0;
+    return test::summary();
 }
