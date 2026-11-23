@@ -25,7 +25,14 @@ clang_args=(-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++)
 sanitizers="-fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer"
 
 # The same names as in ci.yml, shortened
-all_jobs=(gcc17 gcc20 gcc23 clang-asan gcc-noexc17 gcc-noexc23 gcc-system-sqlite install-gcc install-system-sqlite format)
+all_jobs=(
+    gcc11 gcc14 gcc17 gcc20 gcc23
+    clang-asan clang-asan11
+    gcc-noexc11 gcc-noexc17 gcc-noexc23
+    gcc-system-sqlite
+    install-gcc install-gcc11 install-system-sqlite
+    format
+)
 
 # build <job> <build type> <C++ standard> <extra CMake arguments...>: a build job from ci.yml
 build()
@@ -79,6 +86,8 @@ format()
 run()
 {
     case "$1" in
+    gcc11) build "$1" Release 11 "${gcc_args[@]}" ;;
+    gcc14) build "$1" Release 14 "${gcc_args[@]}" ;;
     gcc17) build "$1" Release 17 "${gcc_args[@]}" ;;
     gcc20) build "$1" Release 20 "${gcc_args[@]}" ;;
     gcc23) build "$1" Release 23 "${gcc_args[@]}" ;;
@@ -86,10 +95,16 @@ run()
         build "$1" Debug 17 "${clang_args[@]}" "-DCMAKE_CXX_FLAGS=$sanitizers" \
             "-DCMAKE_EXE_LINKER_FLAGS=-fsanitize=address,undefined"
         ;;
+    clang-asan11)
+        build "$1" Debug 11 "${clang_args[@]}" "-DCMAKE_CXX_FLAGS=$sanitizers" \
+            "-DCMAKE_EXE_LINKER_FLAGS=-fsanitize=address,undefined"
+        ;;
+    gcc-noexc11) build "$1" Release 11 "${gcc_args[@]}" -DCMAKE_CXX_FLAGS=-fno-exceptions ;;
     gcc-noexc17) build "$1" Release 17 "${gcc_args[@]}" -DCMAKE_CXX_FLAGS=-fno-exceptions ;;
     gcc-noexc23) build "$1" Release 23 "${gcc_args[@]}" -DCMAKE_CXX_FLAGS=-fno-exceptions ;;
     gcc-system-sqlite) build "$1" Release 17 "${gcc_args[@]}" -DSQLITEXX_USE_SYSTEM_SQLITE=ON ;;
     install-gcc) install "$1" "${gcc_args[@]}" ;;
+    install-gcc11) install "$1" "${gcc_args[@]}" -DCMAKE_CXX_STANDARD=11 ;;
     install-system-sqlite) install "$1" "${gcc_args[@]}" -DCMAKE_CXX_STANDARD=23 -DSQLITEXX_USE_SYSTEM_SQLITE=ON ;;
     format) format ;;
     *)
