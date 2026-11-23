@@ -95,7 +95,7 @@ namespace detail
         unsigned_64_bit
     ) noexcept
     {
-        return value <= static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max());
+        return value <= static_cast<std::uint64_t>((std::numeric_limits<std::int64_t>::max)());
     }
 
     template <class T>
@@ -122,8 +122,8 @@ namespace detail
         signed_narrower
     ) noexcept
     {
-        return value >= static_cast<std::int64_t>(std::numeric_limits<T>::min())
-            && value <= static_cast<std::int64_t>(std::numeric_limits<T>::max());
+        return value >= static_cast<std::int64_t>((std::numeric_limits<T>::min)())
+            && value <= static_cast<std::int64_t>((std::numeric_limits<T>::max)());
     }
 
     template <class T>
@@ -141,7 +141,7 @@ namespace detail
         unsigned_narrower
     ) noexcept
     {
-        return value >= 0 && value <= static_cast<std::int64_t>(std::numeric_limits<T>::max());
+        return value >= 0 && value <= static_cast<std::int64_t>((std::numeric_limits<T>::max)());
     }
 } // detail
 

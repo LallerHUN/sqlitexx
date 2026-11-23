@@ -61,6 +61,33 @@ jobs:
               "-DCMAKE_CXX_FLAGS=-fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer"
               "-DCMAKE_EXE_LINKER_FLAGS=-fsanitize=address,undefined"
 
+          # sqlitexx never throws, so it must build and work with exceptions switched off: once with expected-lite
+          # (C++17) and once with std::expected (C++23) on each compiler family. MSVC switches use '-', which it
+          # accepts like '/', so Git Bash on the Windows runner does not rewrite them as paths.
+          - name: Windows MSVC no exceptions C++17
+            os: windows-latest
+            build_type: Release
+            cxx_standard: 17
+            cmake_args: '"-DCMAKE_CXX_FLAGS=-DWIN32 -D_WINDOWS -EHs-c- -D_HAS_EXCEPTIONS=0"'
+
+          - name: Windows MSVC no exceptions C++23
+            os: windows-latest
+            build_type: Release
+            cxx_standard: 23
+            cmake_args: '"-DCMAKE_CXX_FLAGS=-DWIN32 -D_WINDOWS -EHs-c- -D_HAS_EXCEPTIONS=0"'
+
+          - name: Linux GCC no exceptions C++17
+            os: ubuntu-latest
+            build_type: Release
+            cxx_standard: 17
+            cmake_args: -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_CXX_FLAGS=-fno-exceptions
+
+          - name: Linux GCC no exceptions C++23
+            os: ubuntu-latest
+            build_type: Release
+            cxx_standard: 23
+            cmake_args: -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_CXX_FLAGS=-fno-exceptions
+
           - name: Linux GCC system SQLite
             os: ubuntu-latest
             build_type: Release
