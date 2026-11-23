@@ -123,6 +123,55 @@ jobs:
       - name: Test
         run: ctest --test-dir build --build-config ${{ matrix.build_type }} --output-on-failure
 
+  # Installs sqlitexx and builds tests/install, a separate project that finds it with find_package like a user would
+  install:
+    name: Install ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows MSVC
+            os: windows-latest
+
+          - name: Linux GCC
+            os: ubuntu-latest
+            cmake_args: -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++
+            consumer_args: -DCMAKE_CXX_COMPILER=g++
+
+          # The package has to find the system SQLite again, and pass C++23 on for std::expected
+          - name: Linux GCC system SQLite C++23
+            os: ubuntu-latest
+            system_sqlite: true
+            cmake_args: >-
+              -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++
+              -DCMAKE_CXX_STANDARD=23 -DSQLITEXX_USE_SYSTEM_SQLITE=ON
+            consumer_args: -DCMAKE_CXX_COMPILER=g++
+
+          - name: macOS AppleClang
+            os: macos-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install system SQLite
+        if: matrix.system_sqlite
+        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
+
+      - name: Build and install sqlitexx
+        shell: bash
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DSQLITEXX_BUILD_TESTS=OFF -DSQLITEXX_BUILD_EXAMPLES=OFF ${{ matrix.cmake_args }}
+          cmake --build build --config Release --parallel
+          cmake --install build --config Release --prefix "${{ runner.temp }}/prefix"
+
+      - name: Build and run a project using the installed package
+        shell: bash
+        run: |
+          cmake -S tests/install -B consumer -DCMAKE_BUILD_TYPE=Release "-DCMAKE_PREFIX_PATH=${{ runner.temp }}/prefix" ${{ matrix.consumer_args }}
+          cmake --build consumer --config Release
+          ctest --test-dir consumer --build-config Release --output-on-failure
+
   format:
     name: clang-format
     runs-on: ubuntu-latest

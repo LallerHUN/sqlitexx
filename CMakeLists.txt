@@ -9,6 +9,9 @@ project(sqlitexx
 option(SQLITEXX_BUILD_TESTS "Build the sqlitexx tests" ${PROJECT_IS_TOP_LEVEL})
 option(SQLITEXX_BUILD_EXAMPLES "Build the sqlitexx examples (and run them as tests)" ${PROJECT_IS_TOP_LEVEL})
 option(SQLITEXX_WARNINGS_AS_ERRORS "Treat warnings in sqlitexx and its tests as errors (CI turns this on)" OFF)
+option(SQLITEXX_INSTALL "Generate the install rules (cmake --install) and the CMake package" ${PROJECT_IS_TOP_LEVEL})
+
+include(GNUInstallDirs)
 
 # Compile options for sqlitexx's own code (not for SQLite)
 if(MSVC)
@@ -87,6 +90,10 @@ else()
 
     add_library(sqlitexx_sqlite3 STATIC "${sqlite3_SOURCE_DIR}/sqlite3.c")
     target_include_directories(sqlitexx_sqlite3 SYSTEM PUBLIC "$<BUILD_INTERFACE:${sqlite3_SOURCE_DIR}>")
+    set_target_properties(sqlitexx_sqlite3 PROPERTIES
+        EXPORT_NAME sqlite3
+        DEBUG_POSTFIX d
+    )
 
     if(UNIX)
         find_package(Threads REQUIRED)
@@ -159,10 +166,14 @@ elseif(sqlitexx_expected STREQUAL "LITE")
         )
         FetchContent_MakeAvailable(expected_lite)
 
+        # Installed under sqlitexx's own include directory, so it cannot replace a different expected-lite version that
+        # the user has installed as <nonstd/expected.hpp>
         add_library(sqlitexx_expected_lite INTERFACE)
         target_include_directories(sqlitexx_expected_lite SYSTEM INTERFACE
             "$<BUILD_INTERFACE:${expected_lite_SOURCE_DIR}/include>"
+            "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/sqlitexx/third_party>"
         )
+        set_target_properties(sqlitexx_expected_lite PROPERTIES EXPORT_NAME expected_lite)
         set(sqlitexx_expected_target sqlitexx_expected_lite)
         message(STATUS "sqlitexx: expected is expected-lite 0.10.0")
     endif()
@@ -185,10 +196,15 @@ add_library(sqlitexx::sqlitexx ALIAS sqlitexx)
 target_compile_features(sqlitexx PUBLIC ${sqlitexx_expected_feature})
 target_compile_definitions(sqlitexx PUBLIC ${sqlitexx_expected_definitions})
 target_link_libraries(sqlitexx PUBLIC ${sqlitexx_expected_target})
-set_target_properties(sqlitexx PROPERTIES CXX_EXTENSIONS OFF)
+set_target_properties(sqlitexx PROPERTIES
+    CXX_EXTENSIONS OFF
+    DEBUG_POSTFIX d
+)
 
 target_include_directories(sqlitexx
-    PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
+    PUBLIC
+        "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
+        "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>"
     PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src"
 )
 
@@ -198,6 +214,89 @@ target_link_libraries(sqlitexx PRIVATE ${SQLITEXX_SQLITE_TARGET})
 target_compile_options(sqlitexx PRIVATE ${SQLITEXX_COMPILE_OPTIONS})
 if(MSVC)
     target_compile_options(sqlitexx PUBLIC /Zc:__cplusplus)
+endif()
+
+# --- Install ----------------------------------------------------------------------------------------------------------
+#
+# cmake --install puts the headers, the libraries and a CMake package into the install prefix, for
+#
+#     find_package(sqlitexx 0.1 REQUIRED)
+#     target_link_libraries(my_app PRIVATE sqlitexx::sqlitexx)
+#
+# The bundled SQLite (sqlitexx::sqlite3) and expected-lite are installed along; installed ones (SQLITEXX_USE_SYSTEM_*)
+# are looked up again by the package. Debug libraries get a 'd' suffix, so Debug and Release can share one prefix.
+
+if(SQLITEXX_INSTALL)
+    include(CMakePackageConfigHelpers)
+
+    set(sqlitexx_cmake_dir "${CMAKE_INSTALL_LIBDIR}/cmake/sqlitexx")
+    set(sqlitexx_doc_dir "${CMAKE_INSTALL_DATADIR}/doc/sqlitexx")
+
+    set(sqlitexx_install_targets sqlitexx)
+    if(TARGET sqlitexx_sqlite3)
+        list(APPEND sqlitexx_install_targets sqlitexx_sqlite3)
+    endif()
+    if(TARGET sqlitexx_expected_lite)
+        list(APPEND sqlitexx_install_targets sqlitexx_expected_lite)
+        install(FILES "${expected_lite_SOURCE_DIR}/include/nonstd/expected.hpp"
+            DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/sqlitexx/third_party/nonstd"
+        )
+        install(FILES "${expected_lite_SOURCE_DIR}/LICENSE.txt"
+            DESTINATION "${sqlitexx_doc_dir}"
+            RENAME expected-lite-LICENSE.txt
+        )
+    endif()
+
+    install(TARGETS ${sqlitexx_install_targets}
+        EXPORT sqlitexxTargets
+        ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+        LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+        RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
+    )
+    install(DIRECTORY include/sqlitexx DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
+    install(FILES LICENSE README.md DESTINATION "${sqlitexx_doc_dir}")
+
+    install(EXPORT sqlitexxTargets
+        NAMESPACE sqlitexx::
+        DESTINATION "${sqlitexx_cmake_dir}"
+    )
+
+    # What the package has to find again in the consumer's build
+    set(sqlitexx_needs_threads OFF)
+    if(TARGET sqlitexx_sqlite3 AND UNIX)
+        set(sqlitexx_needs_threads ON)
+    endif()
+    set(sqlitexx_needs_expected_lite OFF)
+    if(sqlitexx_expected STREQUAL "LITE" AND SQLITEXX_USE_SYSTEM_EXPECTED_LITE)
+        set(sqlitexx_needs_expected_lite ON)
+    endif()
+
+    if(SQLITEXX_USE_SYSTEM_SQLITE)
+        set(sqlitexx_sqlite_summary "installed, found with find_package(SQLite3)")
+    else()
+        set(sqlitexx_sqlite_summary "bundled 3.54.1, installed as sqlitexx::sqlite3")
+    endif()
+    if(sqlitexx_expected STREQUAL "STD")
+        set(sqlitexx_expected_summary "std::expected (C++23)")
+    elseif(SQLITEXX_USE_SYSTEM_EXPECTED_LITE)
+        set(sqlitexx_expected_summary "installed expected-lite, found with find_package(expected-lite)")
+    else()
+        set(sqlitexx_expected_summary "bundled expected-lite 0.10.0, installed in include/sqlitexx/third_party")
+    endif()
+
+    configure_package_config_file(cmake/sqlitexxConfig.cmake.in
+        "${CMAKE_CURRENT_BINARY_DIR}/sqlitexxConfig.cmake"
+        INSTALL_DESTINATION "${sqlitexx_cmake_dir}"
+    )
+    # Before 1.0, minor versions may break the API, so only the same minor version counts as compatible
+    write_basic_package_version_file("${CMAKE_CURRENT_BINARY_DIR}/sqlitexxConfigVersion.cmake"
+        COMPATIBILITY SameMinorVersion
+    )
+    install(FILES
+        "${CMAKE_CURRENT_BINARY_DIR}/sqlitexxConfig.cmake"
+        "${CMAKE_CURRENT_BINARY_DIR}/sqlitexxConfigVersion.cmake"
+        DESTINATION "${sqlitexx_cmake_dir}"
+    )
 endif()
 
 # --- Tests and examples -----------------------------------------------------------------------------------------------

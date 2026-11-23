@@ -1,0 +1,26 @@
+# CMake package for sqlitexx @PROJECT_VERSION@: find_package(sqlitexx) gives the target sqlitexx::sqlitexx.
+
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+# This sqlitexx was built with:
+#   SQLite:   @sqlitexx_sqlite_summary@
+#   expected: @sqlitexx_expected_summary@
+set(sqlitexx_EXPECTED "@sqlitexx_expected@")
+
+if(@sqlitexx_needs_threads@)
+    find_dependency(Threads)
+endif()
+
+if(@SQLITEXX_USE_SYSTEM_SQLITE@)
+    find_dependency(SQLite3 @SQLITEXX_SQLITE_MIN_VERSION@)
+endif()
+
+if(@sqlitexx_needs_expected_lite@)
+    find_dependency(expected-lite CONFIG)
+endif()
+
+include("${CMAKE_CURRENT_LIST_DIR}/sqlitexxTargets.cmake")
+
+check_required_components(sqlitexx)
