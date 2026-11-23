@@ -156,10 +156,37 @@ failure paths too: the error code, and the message when it matters.
 ## Branches and releases
 
 - `develop` is where work lands. It always builds and passes CI, but its API may change at any time.
-- `main` holds released versions only. A release is a pull request from `develop` into `main`; once it is merged,
-  the merge commit on `main` gets a version tag (`v0.1.0`) and a GitHub release with notes.
+- `main` holds released versions only: every commit on it is a release, tagged `vX.Y.Z`.
 - Versions follow [Semantic Versioning](https://semver.org). Before 1.0, a minor version (`0.2`) may break the API,
   which is why the CMake package only accepts the same minor version.
+
+### Making a release
+
+A release goes through a short-lived release branch between `develop` and `main`, so that `develop` can keep moving
+and fixes found during the release land in one place.
+
+1. Cut `release/vX.Y.Z` from `develop`. Set the version in `CMakeLists.txt` and wherever `find_package(sqlitexx X.Y)`
+   appears (README, `tests/install`, the install comment in `CMakeLists.txt`), and push.
+2. Open a pull request from `release/vX.Y.Z` into `main`. Anything that has to change for the release, such as a fix
+   CI turns up, is committed to the release branch; features stay on `develop` for the next release.
+3. When CI passes, merge it into `main`. Put an annotated tag `vX.Y.Z` on that merge commit and publish a GitHub
+   release with notes: what's new, breaking changes, requirements, known limits.
+4. Open a pull request from `release/vX.Y.Z` into `develop` and merge it, so the version and any release fixes reach
+   `develop` too. The release is finished only after this step: skipping it leaves `develop` behind `main`.
+5. Delete the release branch.
+
+### Patch releases
+
+A fix for the latest release is a release of its own: cut `release/vX.Y.Z+1` from the latest tag (the tip of
+`main`), commit the fix and the version bump to it, and continue from step 2 above. If the fix is already on
+`develop`, cherry-pick it.
+
+`main` follows only the newest minor version. To fix an older one after a newer minor is out, create
+`support/X.Y` from its latest tag when the first such fix is needed, not in advance:
+
+1. Pull requests with the fix and the version bump go into `support/X.Y`.
+2. Tag the merge commit on `support/X.Y` with `vX.Y.Z` and publish a GitHub release. Nothing is merged into `main`.
+3. Bring the fix to `develop` with its own pull request (a cherry-pick) if it applies there.
 
 ## License
 
