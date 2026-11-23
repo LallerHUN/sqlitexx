@@ -11,11 +11,13 @@
 //         }));
 //
 // bind_values / first / for_each_row / execute_with are steps for and_then on an expected<statement>. on() handles
-// one kind of error in or_else and passes every other error on unchanged.
+// one kind of error in or_else (a native::primary_code, or a native::extended_code such as constraint_unique) and
+// passes every other error on unchanged.
 
 #include "sqlitexx/detail/utility.hpp"
 #include "sqlitexx/error.hpp"
 #include "sqlitexx/expected.hpp"
+#include "sqlitexx/native/extended_code.hpp"
 #include "sqlitexx/native/result.hpp"
 #include "sqlitexx/statement.hpp"
 
@@ -209,7 +211,22 @@ on(native::primary_code code,
     };
 }
 
-// or_else handler for errors with exactly this extended code, for example SQLITE_CONSTRAINT_UNIQUE.
+// or_else handler for errors with exactly this extended code, for example native::extended_code::constraint_unique.
+template <class Handler>
+detail::error_handler<
+    detail::has_extended_code,
+    typename std::decay<Handler>::type>
+on(native::extended_code code,
+   Handler&& handler)
+{
+    return detail::error_handler<detail::has_extended_code, typename std::decay<Handler>::type>{
+        detail::has_extended_code{static_cast<int>(code)},
+        std::forward<Handler>(handler),
+    };
+}
+
+// or_else handler for errors with exactly this extended code given as a number, for a code that
+// native::extended_code doesn't list yet.
 template <class Handler>
 detail::error_handler<
     detail::has_extended_code,

@@ -10,6 +10,7 @@
 #include "sqlitexx/error.hpp"
 #include "sqlitexx/expected.hpp"
 #include "sqlitexx/native/connection.hpp"
+#include "sqlitexx/native/extended_code.hpp"
 #include "sqlitexx/native/flags.hpp"
 #include "sqlitexx/native/result.hpp"
 #include "sqlitexx/native/statement.hpp"

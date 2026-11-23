@@ -202,9 +202,24 @@ too, so one kind of check covers both:
 | `misuse` | `prepare()` was given no SQL statement, or more than one |
 
 `sqlitexx::on(code, handler)` handles one kind of error inside `or_else` and passes every other error on unchanged.
-`code` is a primary code (`native::primary_code::busy`) or an exact extended code as an `int`, such as the value of
-`SQLITE_CONSTRAINT_UNIQUE`. sqlitexx's headers don't include `sqlite3.h`, so the `SQLITE_*` names need your own
-`#include <sqlite3.h>`.
+`code` is either of these:
+
+- A primary code, such as `native::primary_code::constraint`, which matches every extended code under it.
+- An exact extended code, such as `native::extended_code::constraint_unique`.
+
+The extended codes are named after `sqlite3.h` without the prefix (`SQLITE_CONSTRAINT_UNIQUE` becomes
+`constraint_unique`), so you don't need `sqlite3.h` for them. `error::code()` compares with both kinds:
+`e.code() == native::extended_code::busy_timeout`. For a code that a newer SQLite adds and the enum doesn't list yet,
+`on()` also takes the number as an `int`.
+
+```cpp
+auto added = db.prepare("INSERT INTO user(name) VALUES(?)")
+                 .and_then(sql::execute_with("Alice"))
+                 .transform([] { return true; })
+                 .or_else(sql::on(sql::native::extended_code::constraint_unique, [](const sql::error&) {
+                     return sql::expected<bool>(false); // already there
+                 }));
+```
 
 ### Chaining helpers
 

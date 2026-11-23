@@ -1,6 +1,8 @@
 #ifndef SQLITEXX_NATIVE_RESULT_HPP
 #define SQLITEXX_NATIVE_RESULT_HPP
 
+#include "sqlitexx/native/extended_code.hpp"
+
 namespace sqlitexx
 {
 namespace native
@@ -125,6 +127,23 @@ namespace native
     ) noexcept
     {
         return lhs.primary() != rhs;
+    }
+
+    // An exact match: SQLITE_CONSTRAINT_UNIQUE equals extended_code::constraint_unique and nothing else
+    constexpr bool operator==(
+        result lhs,
+        extended_code rhs
+    ) noexcept
+    {
+        return lhs.code() == static_cast<int>(rhs);
+    }
+
+    constexpr bool operator!=(
+        result lhs,
+        extended_code rhs
+    ) noexcept
+    {
+        return lhs.code() != static_cast<int>(rhs);
     }
 
 } // native
