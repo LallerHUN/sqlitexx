@@ -150,16 +150,49 @@ failure paths too: the error code, and the message when it matters.
   request.
 - Commit subjects say what changed, starting with the area: `Transactions: RAII transaction and in_transaction`. The
   body says why, and anything a reviewer could not tell from the diff.
+- A change users can notice (a new function, different behavior, a fix) adds a line to `## [Unreleased]` in
+  [CHANGELOG.md](CHANGELOG.md), under Added, Changed, Deprecated, Removed, Fixed or Security. Mark a change that
+  breaks the API with **Breaking:**. Tests, CI and internal refactoring need no entry.
 - Pull requests are merged with a merge commit once CI passes, so every commit in your branch stays in the history:
   make each one meaningful.
 
 ## Branches and releases
 
 - `develop` is where work lands. It always builds and passes CI, but its API may change at any time.
-- `main` holds released versions only. A release is a pull request from `develop` into `main`; once it is merged,
-  the merge commit on `main` gets a version tag (`v0.1.0`) and a GitHub release with notes.
+- `main` holds released versions only: every commit on it is a release, tagged `vX.Y.Z`.
 - Versions follow [Semantic Versioning](https://semver.org). Before 1.0, a minor version (`0.2`) may break the API,
   which is why the CMake package only accepts the same minor version.
+
+### Making a release
+
+A release goes through a short-lived release branch between `develop` and `main`, so that `develop` can keep moving
+and fixes found during the release land in one place.
+
+1. Cut `release/vX.Y.Z` from `develop`. Set the version in `CMakeLists.txt` and wherever `find_package(sqlitexx X.Y)`
+   appears (README, `tests/install`, the install comment in `CMakeLists.txt`). In CHANGELOG.md, turn
+   `## [Unreleased]` into `## [X.Y.Z] - YYYY-MM-DD` with a new empty `[Unreleased]` above it, and update the
+   compare links at the bottom. Push.
+2. Open a pull request from `release/vX.Y.Z` into `main`. Anything that has to change for the release, such as a fix
+   CI turns up, is committed to the release branch; features stay on `develop` for the next release.
+3. When CI passes, merge it into `main`. Put an annotated tag `vX.Y.Z` on that merge commit and publish a GitHub
+   release with notes: the version's CHANGELOG.md section, plus requirements and known limits.
+4. Open a pull request from `release/vX.Y.Z` into `develop` and merge it, so the version and any release fixes reach
+   `develop` too. The release is finished only after this step: skipping it leaves `develop` behind `main`.
+5. Delete the release branch.
+
+### Patch releases
+
+A fix for the latest release is a release of its own: cut `release/vX.Y.Z+1` from the latest tag (the tip of
+`main`), commit the fix, the version bump and its CHANGELOG.md section to it, and continue from step 2 above. If the
+fix is already on `develop`, cherry-pick it.
+
+`main` follows only the newest minor version. To fix an older one after a newer minor is out, create
+`support/X.Y` from its latest tag when the first such fix is needed, not in advance:
+
+1. Pull requests with the fix, the version bump and the CHANGELOG.md section go into `support/X.Y`.
+2. Tag the merge commit on `support/X.Y` with `vX.Y.Z` and publish a GitHub release. Nothing is merged into `main`.
+3. Open a pull request into `develop` with the release's CHANGELOG.md section, so that `develop` lists every release,
+   and the fix itself (a cherry-pick) if it applies there.
 
 ## License
 
