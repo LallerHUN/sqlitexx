@@ -98,7 +98,8 @@ This program is [examples/quick_start.cpp](examples/quick_start.cpp); CI builds 
 
 ## Requirements
 
-- A C++17 compiler. Tested in CI with MSVC (Visual Studio 2026), GCC and Clang on Linux, and AppleClang on macOS.
+- A C++11 compiler or newer. Tested in CI with MSVC (Visual Studio 2026, C++14 and newer), GCC and Clang on Linux
+  (C++11 to C++23), and AppleClang on macOS.
 - CMake 3.21 or newer.
 - SQLite 3.37 or newer. By default CMake downloads and builds SQLite itself, so nothing needs to be installed.
 
@@ -117,8 +118,9 @@ find_package(sqlitexx 0.1 REQUIRED) # with <prefix> in CMAKE_PREFIX_PATH
 target_link_libraries(my_app PRIVATE sqlitexx::sqlitexx)
 ```
 
-The bundled SQLite and expected-lite are installed with it. When sqlitexx was built with
-`SQLITEXX_USE_SYSTEM_SQLITE` or `SQLITEXX_USE_SYSTEM_EXPECTED_LITE`, the package finds those again in your build.
+The bundled SQLite and backports (expected-lite, and before C++17 string-view-lite and optional-lite) are installed
+with it. When sqlitexx was built with one of the `SQLITEXX_USE_SYSTEM_*` options, the package finds those again in
+your build.
 Debug libraries carry a `d` suffix, so Debug and Release can be installed into the same prefix.
 
 Or built along with your project, with CMake's `FetchContent`:
@@ -153,6 +155,8 @@ ctest --test-dir build --build-config Release --output-on-failure
 | `SQLITEXX_USE_SYSTEM_SQLITE` | `OFF` | Use an installed SQLite (`find_package(SQLite3)`) instead of downloading the pinned one. Turn it on when your application links SQLite itself: two copies of SQLite in one process can corrupt databases on POSIX systems. |
 | `SQLITEXX_EXPECTED` | `AUTO` | Which `expected` the typed API uses: `STD` (C++23 `std::expected`), `LITE` ([expected-lite](https://github.com/nonstd-lite/expected-lite)), or `AUTO`, which picks `std::expected` when `CMAKE_CXX_STANDARD` is 23 or newer and the standard library has it. |
 | `SQLITEXX_USE_SYSTEM_EXPECTED_LITE` | `OFF` | Use an installed expected-lite instead of downloading the pinned one. |
+| `SQLITEXX_CXX17_TYPES` | `AUTO` | Which `string_view` and `optional` the API uses: `STD` (C++17's), `LITE` ([string-view-lite](https://github.com/nonstd-lite/string-view-lite) and [optional-lite](https://github.com/nonstd-lite/optional-lite)), or `AUTO`, which picks the backports when `CMAKE_CXX_STANDARD` is below 17. |
+| `SQLITEXX_USE_SYSTEM_LITE_TYPES` | `OFF` | Use an installed string-view-lite and optional-lite instead of downloading the pinned ones. |
 | `SQLITEXX_BUILD_TESTS` | top-level only | Build the tests. |
 | `SQLITEXX_BUILD_EXAMPLES` | top-level only | Build the examples and run them as tests. |
 | `SQLITEXX_WARNINGS_AS_ERRORS` | `OFF` | Treat warnings in sqlitexx and its tests as errors. CI turns it on. |
@@ -224,11 +228,17 @@ out of scope unless `commit()` succeeded. `mode` is `transaction_mode::deferred`
 is after a deferred constraint violation or `SQLITE_BUSY`, so you can fix the data or retry, while some other errors
 make SQLite roll back on its own. A transaction must not outlive its database.
 
-### std::expected or expected-lite
+### Standard types or backports
 
-`sqlitexx::expected` is `std::expected` or expected-lite's, depending on `SQLITEXX_EXPECTED`. CMake decides once and
-passes the choice to everything that links sqlitexx, so the library and your code always agree on which one the API
-uses. Write `sqlitexx::expected`, `sqlitexx::unexpected` and `sqlitexx::unexpect` and your code works with either.
+`sqlitexx::expected` is `std::expected` or expected-lite's, depending on `SQLITEXX_EXPECTED`, and
+`sqlitexx::string_view` and `sqlitexx::optional` are the C++17 ones or string-view-lite's and optional-lite's,
+depending on `SQLITEXX_CXX17_TYPES`. CMake decides once and passes the choice to everything that links sqlitexx, so
+the library and your code always agree on which types the API uses. Write `sqlitexx::expected`,
+`sqlitexx::unexpected`, `sqlitexx::unexpect`, `sqlitexx::string_view`, `sqlitexx::optional` and `sqlitexx::nullopt`,
+and your code works with either.
+
+The backports convert from and to `std::string` like the standard types do, but not from or to `std::string_view` and
+`std::optional`: in a C++17 program built with `SQLITEXX_CXX17_TYPES=LITE`, convert explicitly.
 
 ## The native layer
 
@@ -252,4 +262,6 @@ clang-format can't check, and how pull requests get in.
 sqlitexx is distributed under the [Boost Software License, Version 1.0](LICENSE).
 
 It uses [SQLite](https://sqlite.org/copyright.html), which is in the public domain, and
-[expected-lite](https://github.com/nonstd-lite/expected-lite), which is also under the Boost Software License.
+[expected-lite](https://github.com/nonstd-lite/expected-lite),
+[string-view-lite](https://github.com/nonstd-lite/string-view-lite) and
+[optional-lite](https://github.com/nonstd-lite/optional-lite), which are also under the Boost Software License.

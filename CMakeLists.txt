@@ -150,7 +150,7 @@ elseif(sqlitexx_expected STREQUAL "LITE")
         SQLITEXX_USE_STD_EXPECTED=0
         nsel_CONFIG_SELECT_EXPECTED=nsel_EXPECTED_NONSTD
     )
-    set(sqlitexx_expected_feature cxx_std_17)
+    set(sqlitexx_expected_feature cxx_std_11)
 
     if(SQLITEXX_USE_SYSTEM_EXPECTED_LITE)
         find_package(expected-lite CONFIG REQUIRED)
@@ -181,6 +181,76 @@ else()
     message(FATAL_ERROR "SQLITEXX_EXPECTED must be AUTO, STD or LITE, not '${SQLITEXX_EXPECTED}'")
 endif()
 
+# --- string_view and optional -----------------------------------------------------------------------------------------
+#
+# The public API takes string_view and returns optional: std:: ones from C++17, string-view-lite and optional-lite
+# before it. As with expected, the choice is made here once, for the library and everything linking it.
+#
+#   AUTO  the std:: types unless CMAKE_CXX_STANDARD is set below 17, the backports then
+#   STD   the std:: types; sqlitexx and everything linking it then need C++17
+#   LITE  string-view-lite and optional-lite, whatever the standard
+
+set(SQLITEXX_CXX17_TYPES "AUTO" CACHE STRING "string_view and optional for the API: AUTO, STD or LITE")
+set_property(CACHE SQLITEXX_CXX17_TYPES PROPERTY STRINGS AUTO STD LITE)
+
+option(SQLITEXX_USE_SYSTEM_LITE_TYPES
+    "Use installed string-view-lite and optional-lite (find_package) instead of the pinned ones" OFF
+)
+
+set(sqlitexx_cxx17_types "${SQLITEXX_CXX17_TYPES}")
+if(sqlitexx_cxx17_types STREQUAL "AUTO")
+    set(sqlitexx_cxx17_types STD)
+    if(DEFINED CMAKE_CXX_STANDARD AND (CMAKE_CXX_STANDARD LESS 17 OR CMAKE_CXX_STANDARD EQUAL 98))
+        set(sqlitexx_cxx17_types LITE)
+    endif()
+endif()
+
+if(sqlitexx_cxx17_types STREQUAL "STD")
+    set(sqlitexx_cxx17_definitions SQLITEXX_USE_STD_CXX17_TYPES=1)
+    set(sqlitexx_cxx17_feature cxx_std_17)
+    set(sqlitexx_cxx17_targets "")
+    message(STATUS "sqlitexx: string_view and optional are std::string_view and std::optional")
+elseif(sqlitexx_cxx17_types STREQUAL "LITE")
+    # As for expected-lite: keep the nonstd types classes of their own, even when compiled as C++17
+    set(sqlitexx_cxx17_definitions
+        SQLITEXX_USE_STD_CXX17_TYPES=0
+        nssv_CONFIG_SELECT_STRING_VIEW=nssv_STRING_VIEW_NONSTD
+        optional_CONFIG_SELECT_OPTIONAL=optional_OPTIONAL_NONSTD
+    )
+    set(sqlitexx_cxx17_feature cxx_std_11)
+
+    if(SQLITEXX_USE_SYSTEM_LITE_TYPES)
+        find_package(string-view-lite CONFIG REQUIRED)
+        find_package(optional-lite CONFIG REQUIRED)
+        set(sqlitexx_cxx17_targets nonstd::string-view-lite nonstd::optional-lite)
+        message(STATUS "sqlitexx: string_view and optional are the installed string-view-lite and optional-lite")
+    else()
+        FetchContent_Declare(string_view_lite
+            URL https://github.com/nonstd-lite/string-view-lite/archive/refs/tags/v1.8.2.tar.gz
+            URL_HASH SHA256=62852addccb3b73b72030c6afd130e8b63f9b2a00b032b0af4048b0cc6b49f82
+            SOURCE_SUBDIR do-not-add
+        )
+        FetchContent_Declare(optional_lite
+            URL https://github.com/nonstd-lite/optional-lite/archive/refs/tags/v3.6.0.tar.gz
+            URL_HASH SHA256=2be17fcfc764809612282c3e728cabc42afe703b9dc333cc87c48d882fcfc2c2
+            SOURCE_SUBDIR do-not-add
+        )
+        FetchContent_MakeAvailable(string_view_lite optional_lite)
+
+        add_library(sqlitexx_lite_types INTERFACE)
+        target_include_directories(sqlitexx_lite_types SYSTEM INTERFACE
+            "$<BUILD_INTERFACE:${string_view_lite_SOURCE_DIR}/include>"
+            "$<BUILD_INTERFACE:${optional_lite_SOURCE_DIR}/include>"
+            "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/sqlitexx/third_party>"
+        )
+        set_target_properties(sqlitexx_lite_types PROPERTIES EXPORT_NAME lite_types)
+        set(sqlitexx_cxx17_targets sqlitexx_lite_types)
+        message(STATUS "sqlitexx: string_view and optional are string-view-lite 1.8.2 and optional-lite 3.6.0")
+    endif()
+else()
+    message(FATAL_ERROR "SQLITEXX_CXX17_TYPES must be AUTO, STD or LITE, not '${SQLITEXX_CXX17_TYPES}'")
+endif()
+
 # --- sqlitexx ---------------------------------------------------------------------------------------------------------
 
 add_library(sqlitexx STATIC
@@ -193,9 +263,9 @@ add_library(sqlitexx STATIC
 )
 add_library(sqlitexx::sqlitexx ALIAS sqlitexx)
 
-target_compile_features(sqlitexx PUBLIC ${sqlitexx_expected_feature})
-target_compile_definitions(sqlitexx PUBLIC ${sqlitexx_expected_definitions})
-target_link_libraries(sqlitexx PUBLIC ${sqlitexx_expected_target})
+target_compile_features(sqlitexx PUBLIC ${sqlitexx_expected_feature} ${sqlitexx_cxx17_feature})
+target_compile_definitions(sqlitexx PUBLIC ${sqlitexx_expected_definitions} ${sqlitexx_cxx17_definitions})
+target_link_libraries(sqlitexx PUBLIC ${sqlitexx_expected_target} ${sqlitexx_cxx17_targets})
 set_target_properties(sqlitexx PROPERTIES
     CXX_EXTENSIONS OFF
     DEBUG_POSTFIX d
@@ -223,8 +293,9 @@ endif()
 #     find_package(sqlitexx 0.1 REQUIRED)
 #     target_link_libraries(my_app PRIVATE sqlitexx::sqlitexx)
 #
-# The bundled SQLite (sqlitexx::sqlite3) and expected-lite are installed along; installed ones (SQLITEXX_USE_SYSTEM_*)
-# are looked up again by the package. Debug libraries get a 'd' suffix, so Debug and Release can share one prefix.
+# The bundled SQLite (sqlitexx::sqlite3) and the bundled backports (expected-lite, string-view-lite, optional-lite) are
+# installed along; installed ones (SQLITEXX_USE_SYSTEM_*) are looked up again by the package. Debug libraries get a 'd'
+# suffix, so Debug and Release can share one prefix.
 
 if(SQLITEXX_INSTALL)
     include(CMakePackageConfigHelpers)
@@ -244,6 +315,22 @@ if(SQLITEXX_INSTALL)
         install(FILES "${expected_lite_SOURCE_DIR}/LICENSE.txt"
             DESTINATION "${sqlitexx_doc_dir}"
             RENAME expected-lite-LICENSE.txt
+        )
+    endif()
+    if(TARGET sqlitexx_lite_types)
+        list(APPEND sqlitexx_install_targets sqlitexx_lite_types)
+        install(FILES
+            "${string_view_lite_SOURCE_DIR}/include/nonstd/string_view.hpp"
+            "${optional_lite_SOURCE_DIR}/include/nonstd/optional.hpp"
+            DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/sqlitexx/third_party/nonstd"
+        )
+        install(FILES "${string_view_lite_SOURCE_DIR}/LICENSE.txt"
+            DESTINATION "${sqlitexx_doc_dir}"
+            RENAME string-view-lite-LICENSE.txt
+        )
+        install(FILES "${optional_lite_SOURCE_DIR}/LICENSE.txt"
+            DESTINATION "${sqlitexx_doc_dir}"
+            RENAME optional-lite-LICENSE.txt
         )
     endif()
 
@@ -270,6 +357,10 @@ if(SQLITEXX_INSTALL)
     if(sqlitexx_expected STREQUAL "LITE" AND SQLITEXX_USE_SYSTEM_EXPECTED_LITE)
         set(sqlitexx_needs_expected_lite ON)
     endif()
+    set(sqlitexx_needs_lite_types OFF)
+    if(sqlitexx_cxx17_types STREQUAL "LITE" AND SQLITEXX_USE_SYSTEM_LITE_TYPES)
+        set(sqlitexx_needs_lite_types ON)
+    endif()
 
     if(SQLITEXX_USE_SYSTEM_SQLITE)
         set(sqlitexx_sqlite_summary "installed, found with find_package(SQLite3)")
@@ -282,6 +373,15 @@ if(SQLITEXX_INSTALL)
         set(sqlitexx_expected_summary "installed expected-lite, found with find_package(expected-lite)")
     else()
         set(sqlitexx_expected_summary "bundled expected-lite 0.10.0, installed in include/sqlitexx/third_party")
+    endif()
+    if(sqlitexx_cxx17_types STREQUAL "STD")
+        set(sqlitexx_cxx17_summary "std::string_view and std::optional (C++17)")
+    elseif(SQLITEXX_USE_SYSTEM_LITE_TYPES)
+        set(sqlitexx_cxx17_summary "installed string-view-lite and optional-lite, found with find_package")
+    else()
+        set(sqlitexx_cxx17_summary
+            "bundled string-view-lite 1.8.2 and optional-lite 3.6.0, installed in include/sqlitexx/third_party"
+        )
     endif()
 
     configure_package_config_file(cmake/sqlitexxConfig.cmake.in

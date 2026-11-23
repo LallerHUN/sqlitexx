@@ -32,6 +32,25 @@ jobs:
             build_type: Release
             cxx_standard: 17
 
+          # Before C++17, string_view and optional come from string-view-lite and optional-lite. MSVC has no C++11
+          # mode, so C++14 is its oldest.
+          - name: Windows MSVC C++14
+            os: windows-latest
+            build_type: Release
+            cxx_standard: 14
+
+          - name: Linux GCC C++11
+            os: ubuntu-latest
+            build_type: Release
+            cxx_standard: 11
+            cmake_args: -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++
+
+          - name: Linux GCC C++14
+            os: ubuntu-latest
+            build_type: Release
+            cxx_standard: 14
+            cmake_args: -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++
+
           - name: Linux GCC C++17
             os: ubuntu-latest
             build_type: Release
@@ -61,8 +80,17 @@ jobs:
               "-DCMAKE_CXX_FLAGS=-fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer"
               "-DCMAKE_EXE_LINKER_FLAGS=-fsanitize=address,undefined"
 
-          # sqlitexx never throws, so it must build and work with exceptions switched off: once with expected-lite
-          # (C++17) and once with std::expected (C++23) on each compiler family. MSVC switches use '-', which it
+          - name: Linux Clang C++11 ASan+UBSan
+            os: ubuntu-latest
+            build_type: Debug
+            cxx_standard: 11
+            cmake_args: >-
+              -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+              "-DCMAKE_CXX_FLAGS=-fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer"
+              "-DCMAKE_EXE_LINKER_FLAGS=-fsanitize=address,undefined"
+
+          # sqlitexx never throws, so it must build and work with exceptions switched off: with expected-lite (C++17)
+          # and with std::expected (C++23) on each compiler family, and with every backport on GCC (C++11). MSVC switches use '-', which it
           # accepts like '/', so Git Bash on the Windows runner does not rewrite them as paths.
           - name: Windows MSVC no exceptions C++17
             os: windows-latest
@@ -75,6 +103,12 @@ jobs:
             build_type: Release
             cxx_standard: 23
             cmake_args: '"-DCMAKE_CXX_FLAGS=-DWIN32 -D_WINDOWS -EHs-c- -D_HAS_EXCEPTIONS=0"'
+
+          - name: Linux GCC no exceptions C++11
+            os: ubuntu-latest
+            build_type: Release
+            cxx_standard: 11
+            cmake_args: -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_CXX_FLAGS=-fno-exceptions
 
           - name: Linux GCC no exceptions C++17
             os: ubuntu-latest
@@ -137,6 +171,12 @@ jobs:
           - name: Linux GCC
             os: ubuntu-latest
             cmake_args: -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++
+            consumer_args: -DCMAKE_CXX_COMPILER=g++
+
+          # The bundled string-view-lite and optional-lite are installed with the package
+          - name: Linux GCC C++11
+            os: ubuntu-latest
+            cmake_args: -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_CXX_STANDARD=11
             consumer_args: -DCMAKE_CXX_COMPILER=g++
 
           # The package has to find the system SQLite again, and pass C++23 on for std::expected

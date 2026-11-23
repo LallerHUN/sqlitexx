@@ -5,9 +5,11 @@
 include(CMakeFindDependencyMacro)
 
 # This sqlitexx was built with:
-#   SQLite:   @sqlitexx_sqlite_summary@
-#   expected: @sqlitexx_expected_summary@
+#   SQLite:                   @sqlitexx_sqlite_summary@
+#   expected:                 @sqlitexx_expected_summary@
+#   string_view and optional: @sqlitexx_cxx17_summary@
 set(sqlitexx_EXPECTED "@sqlitexx_expected@")
+set(sqlitexx_CXX17_TYPES "@sqlitexx_cxx17_types@")
 
 if(@sqlitexx_needs_threads@)
     find_dependency(Threads)
@@ -19,6 +21,11 @@ endif()
 
 if(@sqlitexx_needs_expected_lite@)
     find_dependency(expected-lite CONFIG)
+endif()
+
+if(@sqlitexx_needs_lite_types@)
+    find_dependency(string-view-lite CONFIG)
+    find_dependency(optional-lite CONFIG)
 endif()
 
 include("${CMAKE_CURRENT_LIST_DIR}/sqlitexxTargets.cmake")

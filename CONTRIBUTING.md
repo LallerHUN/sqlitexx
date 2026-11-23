@@ -14,12 +14,13 @@ cmake --build build --config Debug
 ctest --test-dir build --build-config Debug --output-on-failure
 ```
 
-CMake downloads SQLite and expected-lite on the first configure; see the README for the options and for offline
-builds. Build with `SQLITEXX_WARNINGS_AS_ERRORS=ON` locally too: CI does, and a warning fails the pull request.
+CMake downloads SQLite and the backports (expected-lite, string-view-lite, optional-lite) on the first configure; see
+the README for the options and for offline builds. Build with `SQLITEXX_WARNINGS_AS_ERRORS=ON` locally too: CI does,
+and a warning fails the pull request.
 
 CI also builds:
 
-- with C++17, C++20 and C++23, so with both expected-lite and `std::expected`;
+- with C++11, C++14, C++17, C++20 and C++23 (MSVC from C++14), so with both the backports and the standard types;
 - with exceptions disabled (`-fno-exceptions`, or `/EHs-c- -D_HAS_EXCEPTIONS=0` on MSVC);
 - with Clang's AddressSanitizer and UndefinedBehaviorSanitizer;
 - against the system SQLite (`SQLITEXX_USE_SYSTEM_SQLITE=ON`);
@@ -93,17 +94,19 @@ grouped by what they do (lifetime, binding, reading, ...), with a short comment 
 
 ### C++ standard
 
-sqlitexx builds as C++17 today, and C++11 and C++14 support is planned. Keep library code free of C++17-only
-features that have no simple C++11 replacement:
+sqlitexx supports C++11 and newer, and CI builds every standard from C++11 to C++23. Library code, tests and examples
+are all C++11:
 
 - no `if constexpr` (use tag dispatch or overloads), fold expressions, structured bindings, `auto` return type
   deduction, generic lambdas, inline variables, class template argument deduction or `namespace a::b`;
+- nothing from C++14 either: no `std::make_unique`, `std::enable_if_t` and the other `_t` aliases, `constexpr`
+  functions with more than a return statement, variable templates, or digit separators;
 - take vocabulary types from sqlitexx's aliases (`sqlitexx::string_view`, `sqlitexx::optional`,
-  `sqlitexx::expected`), never from `std::` directly, so a backport can be swapped in;
+  `sqlitexx::expected`), never from `std::` directly: before C++17 (or C++23 for `expected`) they are backports;
 - helpers that standard C++ only has from C++14 or C++17 on live in `detail/utility.hpp` (`index_sequence`,
   `apply`).
 
-Tests and examples may use C++17 freely.
+Tests and examples follow the same rules, since CI builds them as C++11 too.
 
 ### Errors, never exceptions
 
