@@ -1,0 +1,112 @@
+name: CI
+
+on:
+  push:
+    branches: [develop]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer push to the same branch or pull request cancels the run still going for the older one
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows MSVC Debug
+            os: windows-latest
+            build_type: Debug
+            cxx_standard: 17
+
+          - name: Windows MSVC Release
+            os: windows-latest
+            build_type: Release
+            cxx_standard: 17
+
+          - name: Linux GCC C++17
+            os: ubuntu-latest
+            build_type: Release
+            cxx_standard: 17
+            cmake_args: -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++
+
+          - name: Linux GCC C++20
+            os: ubuntu-latest
+            build_type: Release
+            cxx_standard: 20
+            cmake_args: -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++
+
+          - name: Linux GCC C++23
+            os: ubuntu-latest
+            build_type: Release
+            cxx_standard: 23
+            cmake_args: -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++
+
+          # Sanitizers on sqlitexx's C++ code only: SQLite itself calls functions through cast pointers, which
+          # -fsanitize=function would report.
+          - name: Linux Clang ASan+UBSan
+            os: ubuntu-latest
+            build_type: Debug
+            cxx_standard: 17
+            cmake_args: >-
+              -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+              "-DCMAKE_CXX_FLAGS=-fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer"
+              "-DCMAKE_EXE_LINKER_FLAGS=-fsanitize=address,undefined"
+
+          - name: Linux GCC system SQLite
+            os: ubuntu-latest
+            build_type: Release
+            cxx_standard: 17
+            system_sqlite: true
+            cmake_args: -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DSQLITEXX_USE_SYSTEM_SQLITE=ON
+
+          - name: macOS AppleClang
+            os: macos-latest
+            build_type: Release
+            cxx_standard: 17
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install system SQLite
+        if: matrix.system_sqlite
+        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
+
+      - name: Configure
+        shell: bash
+        run: >-
+          cmake -S . -B build
+          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+          -DCMAKE_CXX_STANDARD=${{ matrix.cxx_standard }}
+          -DCMAKE_CXX_STANDARD_REQUIRED=ON
+          -DSQLITEXX_WARNINGS_AS_ERRORS=ON
+          ${{ matrix.cmake_args }}
+
+      - name: Build
+        run: cmake --build build --config ${{ matrix.build_type }} --parallel
+
+      - name: Test
+        run: ctest --test-dir build --build-config ${{ matrix.build_type }} --output-on-failure
+
+  format:
+    name: clang-format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # The same clang-format version as Visual Studio's, so local formatting and CI agree
+      - name: Install clang-format
+        run: pipx install clang-format==22.1.3
+
+      - name: Check formatting
+        run: |
+          clang-format --version
+          git ls-files -z '*.hpp' '*.cpp' '*.h' | xargs -0 clang-format --dry-run --Werror

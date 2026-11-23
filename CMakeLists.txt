@@ -7,6 +7,43 @@ project(sqlitexx
 )
 
 option(SQLITEXX_BUILD_TESTS "Build the sqlitexx tests" ${PROJECT_IS_TOP_LEVEL})
+option(SQLITEXX_WARNINGS_AS_ERRORS "Treat warnings in sqlitexx and its tests as errors (CI turns this on)" OFF)
+
+# Compile options for sqlitexx's own code (not for SQLite)
+if(MSVC)
+    set(SQLITEXX_COMPILE_OPTIONS
+        /W4
+        /permissive-
+        /utf-8
+        /w14062 # switch on an enum misses a value and has no default
+    )
+    if(SQLITEXX_WARNINGS_AS_ERRORS)
+        list(APPEND SQLITEXX_COMPILE_OPTIONS /WX)
+    endif()
+else()
+    set(SQLITEXX_COMPILE_OPTIONS
+        -Wall
+        -Wextra
+        -Wpedantic
+        -Wconversion
+        -Wsign-conversion
+        -Wshadow # members have no prefix, so a local must not hide one
+        -Wold-style-cast
+        # Fallthrough is left to tests, not to [[fallthrough]] annotations. GCC turns the warning on in -Wextra and
+        # Clang does not, so switch it off for both to keep them in step.
+        -Wno-implicit-fallthrough
+    )
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        list(APPEND SQLITEXX_COMPILE_OPTIONS
+            -Wduplicated-cond
+            -Wduplicated-branches
+            -Wlogical-op
+        )
+    endif()
+    if(SQLITEXX_WARNINGS_AS_ERRORS)
+        list(APPEND SQLITEXX_COMPILE_OPTIONS -Werror)
+    endif()
+endif()
 
 # --- SQLite -----------------------------------------------------------------------------------------------------------
 #
@@ -77,11 +114,9 @@ target_include_directories(sqlitexx
 # The public headers do not include sqlite3.h; users who want the raw C API link SQLite themselves.
 target_link_libraries(sqlitexx PRIVATE ${SQLITEXX_SQLITE_TARGET})
 
+target_compile_options(sqlitexx PRIVATE ${SQLITEXX_COMPILE_OPTIONS})
 if(MSVC)
-    target_compile_options(sqlitexx PRIVATE /W4 /permissive- /utf-8)
     target_compile_options(sqlitexx PUBLIC /Zc:__cplusplus)
-else()
-    target_compile_options(sqlitexx PRIVATE -Wall -Wextra -Wpedantic -Wconversion)
 endif()
 
 # --- Tests ------------------------------------------------------------------------------------------------------------
