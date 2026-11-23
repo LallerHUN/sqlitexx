@@ -162,6 +162,9 @@ void test_constraint_is_extended()
     const result rc = insert.step();
     CHECK(rc == primary_code::constraint);
     CHECK(rc.code() != static_cast<int>(primary_code::constraint)); // SQLITE_CONSTRAINT_UNIQUE, not the bare code
+    CHECK(rc == extended_code::constraint_unique);
+    CHECK(!(rc != extended_code::constraint_unique));
+    CHECK(rc != extended_code::constraint_primarykey);
     CHECK(db.extended_errcode() == rc);
 }
 

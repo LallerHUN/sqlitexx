@@ -24,13 +24,11 @@ using sqlitexx::expected;
 using sqlitexx::optional;
 using sqlitexx::statement;
 using sqlitexx::string_view;
+using sqlitexx::native::extended_code;
 using sqlitexx::native::primary_code;
 
 namespace
 {
-// SQLITE_CONSTRAINT_UNIQUE; the tests do not see sqlite3.h, which sqlitexx links privately
-const int constraint_unique = 19 | (8 << 8);
-
 // An in-memory database with a user table, or an empty one when that fails (the checks then report it)
 database open_users()
 {
@@ -277,7 +275,7 @@ void test_chaining()
                                           )
                                           .or_else(
                                               sqlitexx::on(
-                                                  constraint_unique,
+                                                  extended_code::constraint_unique,
                                                   [](const error&)
                                                   {
                                                       return expected<std::string>(std::string("already there"));
@@ -309,6 +307,58 @@ void test_chaining()
     CHECK(counted.has_value());
     CHECK(rows == 2);
 }
+
+void test_extended_codes()
+{
+    database db = open_users();
+
+    // A NULL name breaks NOT NULL, not UNIQUE
+    expected<void> unnamed = db.execute("INSERT INTO user(name) VALUES(NULL)");
+    CHECK(!unnamed);
+    CHECK(!unnamed && unnamed.error().primary() == primary_code::constraint);
+    CHECK(!unnamed && unnamed.error().code() == extended_code::constraint_notnull);
+    CHECK(!unnamed && unnamed.error().code() != extended_code::constraint_unique);
+
+    // on() with an extended code handles that code only: other constraint errors pass through
+    expected<std::string> passed = db.prepare("INSERT INTO user(name) VALUES(NULL)")
+                                       .and_then(sqlitexx::execute_with())
+                                       .transform(
+                                           []
+                                           {
+                                               return std::string("inserted");
+                                           }
+                                       )
+                                       .or_else(
+                                           sqlitexx::on(
+                                               extended_code::constraint_unique,
+                                               [](const error&)
+                                               {
+                                                   return expected<std::string>(std::string("already there"));
+                                               }
+                                           )
+                                       );
+    CHECK(!passed && passed.error().code() == extended_code::constraint_notnull);
+
+    // A code given as a number still works, for codes the enum doesn't list
+    expected<std::string> numbered = db.prepare("INSERT INTO user(name) VALUES(NULL)")
+                                         .and_then(sqlitexx::execute_with())
+                                         .transform(
+                                             []
+                                             {
+                                                 return std::string("inserted");
+                                             }
+                                         )
+                                         .or_else(
+                                             sqlitexx::on(
+                                                 static_cast<int>(extended_code::constraint_notnull),
+                                                 [](const error&)
+                                                 {
+                                                     return expected<std::string>(std::string("needs a name"));
+                                                 }
+                                             )
+                                         );
+    CHECK(numbered && *numbered == "needs a name");
+}
 } // anonymous
 
 int main()
@@ -322,6 +372,7 @@ int main()
     test_cstring_view();
     test_errors_carry_codes_and_messages();
     test_chaining();
+    test_extended_codes();
 
     return test::summary();
 }
