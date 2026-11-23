@@ -34,6 +34,9 @@ namespace detail
 template <class... T>
 using row = typename detail::row_type<T...>::type;
 
+template <class... T>
+class rows_range;
+
 // A prepared statement with typed binding and reading. Move-only. Every operation that can fail returns
 // expected<...>, so calls chain with and_then / or_else / transform.
 class statement final
@@ -162,6 +165,14 @@ public:
             call_with_row(callback, *values, std::integral_constant<bool, sizeof...(T) == 1>());
         }
     }
+
+    // The rows as a range of expected<row<T...>>, for a range-based for loop (see sqlitexx/rows.hpp). Not on a
+    // temporary statement: it would be gone before the loop body runs.
+    template <class... T>
+    rows_range<T...> rows() &;
+
+    template <class... T>
+    void rows() && = delete;
 
     // Reading the current row (indexes count from 0)
     template <class T>
@@ -319,5 +330,8 @@ private:
 };
 
 } // sqlitexx
+
+// rows() returns a rows_range, which needs the complete statement above
+#include "sqlitexx/rows.hpp"
 
 #endif // SQLITEXX_STATEMENT_HPP
