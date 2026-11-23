@@ -3,10 +3,16 @@
 
 // Everything sqlitexx offers. Include this, or the individual headers.
 
+#include "sqlitexx/chain.hpp"
 #include "sqlitexx/config.hpp"
+#include "sqlitexx/database.hpp"
+#include "sqlitexx/error.hpp"
+#include "sqlitexx/expected.hpp"
 #include "sqlitexx/native/connection.hpp"
 #include "sqlitexx/native/flags.hpp"
 #include "sqlitexx/native/result.hpp"
 #include "sqlitexx/native/statement.hpp"
+#include "sqlitexx/statement.hpp"
+#include "sqlitexx/value.hpp"
 
 #endif // SQLITEXX_SQLITEXX_HPP
