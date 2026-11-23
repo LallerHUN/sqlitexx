@@ -127,7 +127,7 @@ Or built along with your project, with CMake's `FetchContent`:
 include(FetchContent)
 FetchContent_Declare(sqlitexx
     GIT_REPOSITORY https://github.com/LallerHUN/sqlitexx.git
-    GIT_TAG develop # pin a commit for reproducible builds
+    GIT_TAG main # the latest release; pin a version tag for reproducible builds
 )
 FetchContent_MakeAvailable(sqlitexx)
 
