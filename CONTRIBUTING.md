@@ -28,6 +28,19 @@ CI also builds:
 If you change something that only one of those touches, try it locally the same way; the workflow in
 [.github/workflows/ci.yml](.github/workflows/ci.yml) shows the exact flags.
 
+On Linux, or in WSL on Windows, [tools/check.sh](tools/check.sh) runs all of CI's Linux jobs on your working tree,
+uncommitted changes included, and reports which ones fail:
+
+```shell
+tools/check.sh                   # every job
+tools/check.sh clang-asan format # only these; --list shows the names
+```
+
+It needs gcc, clang, cmake, ninja, the SQLite development files (`libsqlite3-dev`) and clang-format 22.1.3. Build
+directories are kept in `~/.cache/sqlitexx-check`, so a second run only rebuilds what changed. In WSL, run it on the
+Windows checkout (`wsl --cd /mnt/c/<path to sqlitexx> -e bash tools/check.sh`); the builds still go to the Linux
+file system, where they are fast.
+
 ## Where things go
 
 | Path | What |
