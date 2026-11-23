@@ -216,6 +216,30 @@ too, so one kind of check covers both:
 | `execute_with(args...)` | `and_then` | binds `args` and runs the statement to completion |
 | `on(code, handler)` | `or_else` | handles errors with that code |
 
+### Rows as a range
+
+`statement::rows<T...>()` gives the rows of a query for a range-based `for` loop. Each element is an
+`expected<row<T...>>`: the value for one column, a `std::tuple` for several, or the error.
+
+```cpp
+for (sql::expected<std::tuple<std::string, int>>& user : select.rows<std::string, int>())
+{
+    if (!user)
+    {
+        std::printf("%s\n", user.error().message().c_str());
+        break;
+    }
+    std::printf("%s is %d\n", std::get<0>(*user).c_str(), std::get<1>(*user));
+}
+```
+
+- A row that can't be read (NULL into a non-optional type, an integer that doesn't fit) is an error for that row
+  only; the loop may go on. When stepping fails, that error is the last element.
+- Iteration starts where the statement is, without a reset, like `first()` and `for_each()`.
+- It is a single-pass input range. The statement must outlive it, so call `rows()` on a named statement, not on the
+  result of `db.prepare(...)`. In C++20 it is a `std::ranges::input_range`, so `std::views::take`, `filter` and
+  `transform` work on it.
+
 ### Transactions
 
 `sqlitexx::in_transaction` runs a function in a transaction: it commits when the function returns a value and rolls
