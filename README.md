@@ -104,7 +104,24 @@ This program is [examples/quick_start.cpp](examples/quick_start.cpp); CI builds 
 
 ## Using sqlitexx in your project
 
-With CMake's `FetchContent`:
+Installed, through its CMake package:
+
+```shell
+cmake -S . -B build
+cmake --build build --config Release
+cmake --install build --config Release --prefix <prefix>
+```
+
+```cmake
+find_package(sqlitexx 0.1 REQUIRED) # with <prefix> in CMAKE_PREFIX_PATH
+target_link_libraries(my_app PRIVATE sqlitexx::sqlitexx)
+```
+
+The bundled SQLite and expected-lite are installed with it. When sqlitexx was built with
+`SQLITEXX_USE_SYSTEM_SQLITE` or `SQLITEXX_USE_SYSTEM_EXPECTED_LITE`, the package finds those again in your build.
+Debug libraries carry a `d` suffix, so Debug and Release can be installed into the same prefix.
+
+Or built along with your project, with CMake's `FetchContent`:
 
 ```cmake
 include(FetchContent)
@@ -117,7 +134,7 @@ FetchContent_MakeAvailable(sqlitexx)
 target_link_libraries(my_app PRIVATE sqlitexx::sqlitexx)
 ```
 
-Or as a subdirectory: `add_subdirectory(sqlitexx)`. Installing with `cmake --install` is not supported yet.
+Or as a subdirectory: `add_subdirectory(sqlitexx)`.
 
 Include everything with `#include <sqlitexx/sqlitexx.hpp>`, or the individual headers.
 
@@ -139,6 +156,7 @@ ctest --test-dir build --build-config Release --output-on-failure
 | `SQLITEXX_BUILD_TESTS` | top-level only | Build the tests. |
 | `SQLITEXX_BUILD_EXAMPLES` | top-level only | Build the examples and run them as tests. |
 | `SQLITEXX_WARNINGS_AS_ERRORS` | `OFF` | Treat warnings in sqlitexx and its tests as errors. CI turns it on. |
+| `SQLITEXX_INSTALL` | top-level only | Generate the install rules and the CMake package. |
 
 For an offline build, unpack the dependencies yourself and point CMake at them with
 `-DFETCHCONTENT_SOURCE_DIR_SQLITE3=<dir>` and `-DFETCHCONTENT_SOURCE_DIR_EXPECTED_LITE=<dir>`.
