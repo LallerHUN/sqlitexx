@@ -70,14 +70,10 @@ namespace detail
         }
     };
 
-    template <class F, class... T>
-    class for_each_step
+    template <class Callback, class... T>
+    struct for_each_step
     {
-    public:
-        explicit for_each_step(F f)
-            : callback(std::move(f))
-        {
-        }
+        Callback callback;
 
         expected<void> operator()(statement& stmt)
         {
@@ -88,9 +84,6 @@ namespace detail
         {
             return stmt.for_each<T...>(callback);
         }
-
-    private:
-        F callback;
     };
 
     template <class... Args>
@@ -127,7 +120,8 @@ namespace detail
         std::tuple<Args...> args;
     };
 
-    struct primary_code_match
+    // Predicates for error_handler
+    struct has_primary_code
     {
         native::primary_code code;
 
@@ -137,7 +131,7 @@ namespace detail
         }
     };
 
-    struct extended_code_match
+    struct has_extended_code
     {
         int code;
 
@@ -147,34 +141,24 @@ namespace detail
         }
     };
 
-    template <class Match, class F>
-    class error_handler
+    // Calls `handler` for errors `predicate` accepts and passes every other error on
+    template <class Predicate, class Handler>
+    struct error_handler
     {
-    public:
-        error_handler(
-            Match matcher,
-            F f
-        )
-            : match(matcher),
-              handler(std::move(f))
-        {
-        }
+        Predicate predicate;
+        Handler handler;
 
         // The handler's return type is the chain's type, so a non-matching error is passed on in that type.
         template <class E>
-        auto operator()(E&& e) const -> decltype(std::declval<const F&>()(std::declval<const error&>()))
+        auto operator()(E&& e) const -> decltype(std::declval<const Handler&>()(std::declval<const error&>()))
         {
-            using result_type = decltype(std::declval<const F&>()(std::declval<const error&>()));
-            if (match(e))
+            using result_type = decltype(std::declval<const Handler&>()(std::declval<const error&>()));
+            if (predicate(e))
             {
                 return handler(e);
             }
             return result_type(unexpect, std::forward<E>(e));
         }
-
-    private:
-        Match match;
-        F handler;
     };
 } // detail
 
@@ -195,13 +179,13 @@ detail::first_step<T...> first()
 // and_then step: calls `callback` with every row (statement::for_each).
 template <
     class... T,
-    class F>
+    class Callback>
 detail::for_each_step<
-    typename std::decay<F>::type,
+    typename std::decay<Callback>::type,
     T...>
-for_each_row(F&& callback)
+for_each_row(Callback&& callback)
 {
-    return detail::for_each_step<typename std::decay<F>::type, T...>(std::forward<F>(callback));
+    return detail::for_each_step<typename std::decay<Callback>::type, T...>{std::forward<Callback>(callback)};
 }
 
 // and_then step: binds the values and runs the statement to completion (statement::execute).
@@ -212,31 +196,31 @@ detail::execute_step<typename std::decay<Args>::type...> execute_with(Args&&... 
 }
 
 // or_else handler for errors with this primary code (any extended code under it); other errors pass through.
-template <class F>
+template <class Handler>
 detail::error_handler<
-    detail::primary_code_match,
-    typename std::decay<F>::type>
+    detail::has_primary_code,
+    typename std::decay<Handler>::type>
 on(native::primary_code code,
-   F&& handler)
+   Handler&& handler)
 {
-    return detail::error_handler<detail::primary_code_match, typename std::decay<F>::type>(
-        detail::primary_code_match{code},
-        std::forward<F>(handler)
-    );
+    return detail::error_handler<detail::has_primary_code, typename std::decay<Handler>::type>{
+        detail::has_primary_code{code},
+        std::forward<Handler>(handler),
+    };
 }
 
 // or_else handler for errors with exactly this extended code, for example SQLITE_CONSTRAINT_UNIQUE.
-template <class F>
+template <class Handler>
 detail::error_handler<
-    detail::extended_code_match,
-    typename std::decay<F>::type>
+    detail::has_extended_code,
+    typename std::decay<Handler>::type>
 on(int extended_code,
-   F&& handler)
+   Handler&& handler)
 {
-    return detail::error_handler<detail::extended_code_match, typename std::decay<F>::type>(
-        detail::extended_code_match{extended_code},
-        std::forward<F>(handler)
-    );
+    return detail::error_handler<detail::has_extended_code, typename std::decay<Handler>::type>{
+        detail::has_extended_code{extended_code},
+        std::forward<Handler>(handler),
+    };
 }
 
 } // sqlitexx
