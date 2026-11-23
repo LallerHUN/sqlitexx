@@ -13,6 +13,7 @@
 #include "sqlitexx/native/result.hpp"
 #include "sqlitexx/native/statement.hpp"
 #include "sqlitexx/statement.hpp"
+#include "sqlitexx/transaction.hpp"
 #include "sqlitexx/value.hpp"
 
 #endif // SQLITEXX_SQLITEXX_HPP
