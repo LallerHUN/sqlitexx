@@ -131,6 +131,14 @@ failure paths too: the error code, and the message when it matters.
 - Pull requests are merged with a merge commit once CI passes, so every commit in your branch stays in the history:
   make each one meaningful.
 
+## Branches and releases
+
+- `develop` is where work lands. It always builds and passes CI, but its API may change at any time.
+- `main` holds released versions only. A release is a pull request from `develop` into `main`; once it is merged,
+  the merge commit on `main` gets a version tag (`v0.1.0`) and a GitHub release with notes.
+- Versions follow [Semantic Versioning](https://semver.org). Before 1.0, a minor version (`0.2`) may break the API,
+  which is why the CMake package only accepts the same minor version.
+
 ## License
 
 sqlitexx is under the [Boost Software License 1.0](LICENSE). By contributing, you agree that your contribution is
