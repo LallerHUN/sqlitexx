@@ -256,8 +256,10 @@ endif()
 add_library(sqlitexx STATIC
     src/database.cpp
     src/native/connection.cpp
+    src/native/context.cpp
     src/native/result.cpp
     src/native/statement.cpp
+    src/native/value.cpp
     src/statement.cpp
     src/transaction.cpp
 )

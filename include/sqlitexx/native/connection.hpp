@@ -3,6 +3,7 @@
 
 #include "sqlitexx/config.hpp"
 #include "sqlitexx/native/flags.hpp"
+#include "sqlitexx/native/function_callbacks.hpp"
 #include "sqlitexx/native/result.hpp"
 #include "sqlitexx/native/statement.hpp"
 
@@ -70,6 +71,18 @@ namespace native
 
         // Runs one or more semicolon-separated statements and discards their rows.
         result exec(const char* sql) noexcept;
+
+        // SQL functions (sqlite3_create_function_v2 with UTF-8 text). `argument_count` is -1 for any number of
+        // arguments. `destroy` (if not null) is called with `user_data` when SQLite no longer needs it: when the
+        // function is replaced, the connection closes, or this call fails.
+        result create_function(
+            const char* name,
+            int argument_count,
+            function_flags flags,
+            void* user_data,
+            function_callback function,
+            destroy_callback destroy
+        ) noexcept;
 
         // Errors of the most recent failed call on this connection
         const char* errmsg() const noexcept;

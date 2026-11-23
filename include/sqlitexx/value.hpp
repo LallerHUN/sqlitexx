@@ -1,7 +1,8 @@
 #ifndef SQLITEXX_VALUE_HPP
 #define SQLITEXX_VALUE_HPP
 
-// How C++ types become statement parameters and how column values become C++ types.
+// How C++ types become statement parameters and SQL function results, and how column values and SQL function
+// arguments become C++ types.
 //
 // Built in: integers, bool, floating point, std::string, string_view, cstring_view, const char* (binding only), nullptr
 // (binding only), blob, and optional<T> of any of these for nullable values. From C++17 and C++20 on also std::byte
@@ -17,6 +18,15 @@
 //
 // read() is only called for non-NULL values; reading NULL into a type other than optional<T> is an error
 // (primary_code::mismatch) before read() is reached.
+//
+// Traits written for native::statement, as above, work for statements. To work for SQL functions too (arguments and
+// results, see sqlitexx/function.hpp), make bind() and read() templates over the statement type, as the built-in
+// traits are: SQL functions pass objects with the same bind_* and column_* members.
+//
+//     template <class Target>
+//     static native::result bind(Target& stmt, int index, const my_type& value);
+//     template <class Source>
+//     static expected<my_type> read(const Source& stmt, int index);
 
 #include "sqlitexx/config.hpp"
 #include "sqlitexx/cstring_view.hpp"
@@ -54,9 +64,30 @@ namespace detail
         return native::result(static_cast<int>(native::primary_code::mismatch));
     }
 
-    // The text of a non-NULL column. SQLite gives none only when converting the value to text ran out of memory.
-    inline expected<cstring_view> read_text(
-        const native::statement& stmt,
+    // What error messages call the value at `index`: "column 2" here, "argument 1" for SQL function arguments
+    inline std::string value_name(
+        const native::statement&,
+        int index
+    )
+    {
+        return "column " + std::to_string(index);
+    }
+
+    // Finds value_name for any source: the overloads above, and through argument-dependent lookup the ones declared
+    // next to other sources
+    template <class Source>
+    std::string name_of(
+        const Source& source,
+        int index
+    )
+    {
+        return value_name(source, index);
+    }
+
+    // The text of a non-NULL value. SQLite gives none only when converting the value to text ran out of memory.
+    template <class Source>
+    expected<cstring_view> read_text(
+        const Source& stmt,
         int index
     )
     {
@@ -67,19 +98,16 @@ namespace detail
                 unexpect,
                 error(
                     native::result(static_cast<int>(native::primary_code::nomem)),
-                    "column " + std::to_string(index) + ": out of memory converting the value to text"
+                    name_of(stmt, index) + ": out of memory converting the value to text"
                 )
             );
         }
         return *text;
     }
 
-    inline error out_of_range(int index)
+    inline error out_of_range(const std::string& name)
     {
-        return error(
-            mismatch_result(),
-            "column " + std::to_string(index) + ": the integer does not fit the requested type"
-        );
+        return error(mismatch_result(), name + ": the integer does not fit the requested type");
     }
 
     // Integer range checks without comparisons a compiler can call always true (-Wtype-limits): each kind of
@@ -172,8 +200,9 @@ namespace detail
 template <class T>
 struct value_traits<T, typename std::enable_if<std::is_integral<T>::value && !std::is_same<T, bool>::value>::type>
 {
+    template <class Target>
     static native::result bind(
-        native::statement& stmt,
+        Target& stmt,
         int index,
         T value
     ) noexcept
@@ -185,15 +214,16 @@ struct value_traits<T, typename std::enable_if<std::is_integral<T>::value && !st
         return stmt.bind_int64(index, static_cast<std::int64_t>(value));
     }
 
+    template <class Source>
     static expected<T> read(
-        const native::statement& stmt,
+        const Source& stmt,
         int index
     )
     {
         const std::int64_t value = stmt.column_int64(index);
         if (!detail::fits_type<T>(value, detail::integer_kind<T>()))
         {
-            return expected<T>(unexpect, detail::out_of_range(index));
+            return expected<T>(unexpect, detail::out_of_range(detail::name_of(stmt, index)));
         }
         return static_cast<T>(value);
     }
@@ -202,8 +232,9 @@ struct value_traits<T, typename std::enable_if<std::is_integral<T>::value && !st
 template <>
 struct value_traits<bool>
 {
+    template <class Target>
     static native::result bind(
-        native::statement& stmt,
+        Target& stmt,
         int index,
         bool value
     ) noexcept
@@ -211,8 +242,9 @@ struct value_traits<bool>
         return stmt.bind_int(index, value ? 1 : 0);
     }
 
+    template <class Source>
     static expected<bool> read(
-        const native::statement& stmt,
+        const Source& stmt,
         int index
     )
     {
@@ -223,8 +255,9 @@ struct value_traits<bool>
 template <class T>
 struct value_traits<T, typename std::enable_if<std::is_floating_point<T>::value>::type>
 {
+    template <class Target>
     static native::result bind(
-        native::statement& stmt,
+        Target& stmt,
         int index,
         T value
     ) noexcept
@@ -232,8 +265,9 @@ struct value_traits<T, typename std::enable_if<std::is_floating_point<T>::value>
         return stmt.bind_double(index, static_cast<double>(value));
     }
 
+    template <class Source>
     static expected<T> read(
-        const native::statement& stmt,
+        const Source& stmt,
         int index
     )
     {
@@ -244,8 +278,9 @@ struct value_traits<T, typename std::enable_if<std::is_floating_point<T>::value>
 template <>
 struct value_traits<std::string>
 {
+    template <class Target>
     static native::result bind(
-        native::statement& stmt,
+        Target& stmt,
         int index,
         const std::string& value
     ) noexcept
@@ -253,8 +288,9 @@ struct value_traits<std::string>
         return stmt.bind_text(index, string_view(value));
     }
 
+    template <class Source>
     static expected<std::string> read(
-        const native::statement& stmt,
+        const Source& stmt,
         int index
     )
     {
@@ -271,8 +307,9 @@ struct value_traits<std::string>
 template <>
 struct value_traits<string_view>
 {
+    template <class Target>
     static native::result bind(
-        native::statement& stmt,
+        Target& stmt,
         int index,
         string_view value
     ) noexcept
@@ -280,8 +317,9 @@ struct value_traits<string_view>
         return stmt.bind_text(index, value);
     }
 
+    template <class Source>
     static expected<string_view> read(
-        const native::statement& stmt,
+        const Source& stmt,
         int index
     )
     {
@@ -298,8 +336,9 @@ struct value_traits<string_view>
 template <>
 struct value_traits<cstring_view>
 {
+    template <class Target>
     static native::result bind(
-        native::statement& stmt,
+        Target& stmt,
         int index,
         cstring_view value
     ) noexcept
@@ -307,8 +346,9 @@ struct value_traits<cstring_view>
         return stmt.bind_text(index, value.view());
     }
 
+    template <class Source>
     static expected<cstring_view> read(
-        const native::statement& stmt,
+        const Source& stmt,
         int index
     )
     {
@@ -320,8 +360,9 @@ struct value_traits<cstring_view>
 template <>
 struct value_traits<const char*>
 {
+    template <class Target>
     static native::result bind(
-        native::statement& stmt,
+        Target& stmt,
         int index,
         const char* value
     ) noexcept
@@ -343,8 +384,9 @@ struct value_traits<char*> : value_traits<const char*>
 template <>
 struct value_traits<std::nullptr_t>
 {
+    template <class Target>
     static native::result bind(
-        native::statement& stmt,
+        Target& stmt,
         int index,
         std::nullptr_t
     ) noexcept
@@ -356,8 +398,9 @@ struct value_traits<std::nullptr_t>
 template <>
 struct value_traits<blob>
 {
+    template <class Target>
     static native::result bind(
-        native::statement& stmt,
+        Target& stmt,
         int index,
         const blob& value
     ) noexcept
@@ -365,8 +408,9 @@ struct value_traits<blob>
         return stmt.bind_blob(index, value.data(), value.size());
     }
 
+    template <class Source>
     static expected<blob> read(
-        const native::statement& stmt,
+        const Source& stmt,
         int index
     )
     {
@@ -384,8 +428,9 @@ struct value_traits<blob>
 template <class T>
 struct value_traits<optional<T>>
 {
+    template <class Target>
     static native::result bind(
-        native::statement& stmt,
+        Target& stmt,
         int index,
         const optional<T>& value
     )
@@ -397,8 +442,9 @@ struct value_traits<optional<T>>
         return value_traits<T>::bind(stmt, index, *value);
     }
 
+    template <class Source>
     static expected<optional<T>> read(
-        const native::statement& stmt,
+        const Source& stmt,
         int index
     )
     {

@@ -207,5 +207,27 @@ namespace native
         sqlite3_interrupt(db);
     }
 
+    result connection::create_function(
+        const char* name,
+        int argument_count,
+        function_flags flags,
+        void* user_data,
+        function_callback function,
+        destroy_callback destroy
+    ) noexcept
+    {
+        return result(sqlite3_create_function_v2(
+            db,
+            name,
+            argument_count,
+            SQLITE_UTF8 | static_cast<int>(flags),
+            user_data,
+            function,
+            nullptr,
+            nullptr,
+            destroy
+        ));
+    }
+
 } // native
 } // sqlitexx

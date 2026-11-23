@@ -251,6 +251,29 @@ while (select && select->step().value_or(false))
 - No column by that name is a `range` error.
 - Each call searches the columns. In a loop over many rows, call `column_index()` once and read by index.
 
+### SQL functions
+
+`database::create_function(name, callable)` makes a C++ function callable from SQL. The parameters and the return
+type are read and written like columns and parameters, so every type in the Values table works:
+
+```cpp
+db.create_function("greet", [](const std::string& name) { return "Hello, " + name; });
+
+sql::expected<std::string> hello = db.prepare("SELECT greet('Alice')").and_then(sql::first<std::string>());
+```
+
+- The callable is a lambda without `auto` parameters, a function object with one `operator()`, or a function pointer.
+  SQLite keeps a copy until the function is replaced or the database closes.
+- NULL arrives only in an `optional<T>` parameter; anywhere else the call fails with `mismatch`. Returning an empty
+  `optional<T>`, or returning `void`, gives NULL.
+- To fail the call, return an `expected<T>` holding an error: the statement fails with its code and message. With
+  exceptions enabled, a thrown exception fails the call too, and never reaches SQLite.
+- Pass `native::function_flags::deterministic` when the same arguments always give the same result, so SQLite can
+  optimize the calls and use the function in an index.
+
+Your own types work as arguments and results when their `value_traits` are templates, as in
+[sqlitexx/value.hpp](include/sqlitexx/value.hpp). Aggregate and window functions are not supported yet.
+
 ### Rows as a range
 
 `statement::rows<T...>()` gives the rows of a query for a range-based `for` loop. Each element is an

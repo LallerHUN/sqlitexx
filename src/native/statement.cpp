@@ -4,37 +4,6 @@ namespace sqlitexx
 {
 namespace native
 {
-    namespace
-    {
-        sqlite3_destructor_type destructor_for(bind_mode mode) noexcept
-        {
-            if (mode == bind_mode::no_copy)
-            {
-                return SQLITE_STATIC;
-            }
-            return SQLITE_TRANSIENT;
-        }
-
-        // SQLite binds NULL for a null pointer, but an empty string_view may well have one. Text must stay text.
-        const char* non_null(const char* text) noexcept
-        {
-            if (text == nullptr)
-            {
-                return "";
-            }
-            return text;
-        }
-
-        const char16_t* non_null(const char16_t* text) noexcept
-        {
-            if (text == nullptr)
-            {
-                return u"";
-            }
-            return text;
-        }
-    } // anonymous
-
     statement::statement(sqlite3_stmt* handle) noexcept
         : stmt(handle)
     {

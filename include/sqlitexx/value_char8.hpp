@@ -35,8 +35,9 @@ namespace detail
 template <>
 struct value_traits<const char8_t*>
 {
+    template <class Target>
     static native::result bind(
-        native::statement& stmt,
+        Target& stmt,
         int index,
         const char8_t* value
     ) noexcept
@@ -57,8 +58,9 @@ struct value_traits<char8_t*> : value_traits<const char8_t*>
 template <>
 struct value_traits<std::u8string>
 {
+    template <class Target>
     static native::result bind(
-        native::statement& stmt,
+        Target& stmt,
         int index,
         const std::u8string& value
     ) noexcept
@@ -66,8 +68,9 @@ struct value_traits<std::u8string>
         return stmt.bind_text(index, detail::as_char_text(value));
     }
 
+    template <class Source>
     static expected<std::u8string> read(
-        const native::statement& stmt,
+        const Source& stmt,
         int index
     )
     {
@@ -89,8 +92,9 @@ struct value_traits<std::u8string>
 template <>
 struct value_traits<std::u8string_view>
 {
+    template <class Target>
     static native::result bind(
-        native::statement& stmt,
+        Target& stmt,
         int index,
         std::u8string_view value
     ) noexcept
@@ -98,8 +102,9 @@ struct value_traits<std::u8string_view>
         return stmt.bind_text(index, detail::as_char_text(value));
     }
 
+    template <class Source>
     static expected<std::u8string_view> read(
-        const native::statement& stmt,
+        const Source& stmt,
         int index
     )
     {
@@ -116,8 +121,9 @@ struct value_traits<std::u8string_view>
 template <>
 struct value_traits<u8cstring_view>
 {
+    template <class Target>
     static native::result bind(
-        native::statement& stmt,
+        Target& stmt,
         int index,
         u8cstring_view value
     ) noexcept
@@ -125,8 +131,9 @@ struct value_traits<u8cstring_view>
         return stmt.bind_text(index, detail::as_char_text(std::u8string_view(value.data(), value.size())));
     }
 
+    template <class Source>
     static expected<u8cstring_view> read(
-        const native::statement& stmt,
+        const Source& stmt,
         int index
     )
     {

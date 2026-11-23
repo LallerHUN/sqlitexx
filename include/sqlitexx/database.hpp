@@ -2,6 +2,7 @@
 #define SQLITEXX_DATABASE_HPP
 
 #include "sqlitexx/config.hpp"
+#include "sqlitexx/cstring_view.hpp"
 #include "sqlitexx/error.hpp"
 #include "sqlitexx/expected.hpp"
 #include "sqlitexx/native/connection.hpp"
@@ -48,6 +49,15 @@ public:
     // std::chrono::seconds(5).
     expected<void> busy_timeout(std::chrono::milliseconds timeout);
 
+    // SQL functions written in C++, with the parameters and return type of `function` (see sqlitexx/function.hpp).
+    // Registering the same name with the same number of parameters again replaces the function.
+    template <class F>
+    expected<void> create_function(
+        cstring_view name,
+        F&& function,
+        native::function_flags flags = native::function_flags::none
+    );
+
     // The native connection underneath, for what the typed layer does not cover
     native::connection& native_connection() noexcept;
     const native::connection& native_connection() const noexcept;
@@ -61,5 +71,8 @@ private:
 };
 
 } // sqlitexx
+
+// create_function() is defined with the machinery that calls the function
+#include "sqlitexx/function.hpp"
 
 #endif // SQLITEXX_DATABASE_HPP

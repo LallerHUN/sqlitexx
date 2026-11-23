@@ -279,6 +279,10 @@ namespace native
     static_assert(static_cast<unsigned int>(prepare_flags::normalize) == SQLITE_PREPARE_NORMALIZE, "");
     static_assert(static_cast<unsigned int>(prepare_flags::no_vtab) == SQLITE_PREPARE_NO_VTAB, "");
 
+    static_assert(static_cast<int>(function_flags::deterministic) == SQLITE_DETERMINISTIC, "");
+    static_assert(static_cast<int>(function_flags::directonly) == SQLITE_DIRECTONLY, "");
+    static_assert(static_cast<int>(function_flags::innocuous) == SQLITE_INNOCUOUS, "");
+
     static_assert(static_cast<int>(value_type::integer) == SQLITE_INTEGER, "");
     static_assert(static_cast<int>(value_type::floating) == SQLITE_FLOAT, "");
     static_assert(static_cast<int>(value_type::text) == SQLITE_TEXT, "");
