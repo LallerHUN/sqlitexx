@@ -254,7 +254,9 @@ endif()
 # --- sqlitexx ---------------------------------------------------------------------------------------------------------
 
 add_library(sqlitexx STATIC
+    src/backup.cpp
     src/database.cpp
+    src/native/backup.cpp
     src/native/connection.cpp
     src/native/context.cpp
     src/native/result.cpp

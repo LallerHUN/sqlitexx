@@ -12,6 +12,9 @@ All notable changes to sqlitexx are listed here. The format is based on
   `value_traits`; an `expected<T>` result or (with exceptions enabled) an exception fails the call with its code and
   message. `native::function_flags` marks a function `deterministic`, `directonly` or `innocuous`.
 - Native layer: `connection::create_function`, `native::value` for arguments and `native::context` for results.
+- `database::backup_to(destination)` copies a whole database over another one, for example to save an in-memory
+  database to a file. `begin_backup_to(destination)` gives a `backup` that copies in steps with progress. Native
+  layer: `native::backup`.
 
 ### Changed
 

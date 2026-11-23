@@ -317,6 +317,24 @@ out of scope unless `commit()` succeeded. `mode` is `transaction_mode::deferred`
 is after a deferred constraint violation or `SQLITE_BUSY`, so you can fix the data or retry, while some other errors
 make SQLite roll back on its own. A transaction must not outlive its database.
 
+### Backup
+
+`source.backup_to(destination)` copies a whole database over another one, while both stay usable. It's how an
+in-memory database gets saved to a file, and restoring is the same call the other way round:
+
+```cpp
+sql::expected<sql::database> file = sql::database::open("saved.sqlite");
+sql::expected<void> saved = file ? memory.backup_to(*file) : sql::expected<void>(sql::unexpect, file.error());
+```
+
+The call belongs to the database being copied, so the direction is clear: `a.backup_to(b)` replaces everything in
+`b` with `a`'s content.
+
+For large databases, `begin_backup_to(destination)` gives a `backup` that copies in steps: `step(pages)` returns
+true once the copy is complete, and `remaining()` and `page_count()` report progress. Between steps, other
+connections can use the source. A `busy` or `locked` error from `step()` means a lock was in the way, and stepping
+again later retries.
+
 ### Waiting for locks
 
 When another connection holds a lock, a statement fails with `primary_code::busy` at once. `busy_timeout()` makes it

@@ -109,6 +109,45 @@ expected<void> database::busy_timeout(std::chrono::milliseconds timeout)
     return {};
 }
 
+expected<void> database::backup_to(
+    database& destination,
+    cstring_view source_schema,
+    cstring_view destination_schema
+)
+{
+    expected<backup> started = begin_backup_to(destination, source_schema, destination_schema);
+    if (!started)
+    {
+        return expected<void>(unexpect, started.error());
+    }
+    // A negative count copies every page in one step
+    expected<bool> done = started->step(-1);
+    if (!done)
+    {
+        return expected<void>(unexpect, done.error());
+    }
+    return {};
+}
+
+expected<backup> database::begin_backup_to(
+    database& destination,
+    cstring_view source_schema,
+    cstring_view destination_schema
+)
+{
+    if (!db || !destination.db)
+    {
+        return expected<backup>(unexpect, error(native::result(SQLITE_MISUSE), "a backup needs both databases open"));
+    }
+    native::backup started;
+    const native::result code = started.init(destination.db, destination_schema.c_str(), db, source_schema.c_str());
+    if (code.failed())
+    {
+        return expected<backup>(unexpect, detail::make_error(destination.db.handle(), code));
+    }
+    return backup(std::move(started), destination.db.handle());
+}
+
 native::connection& database::native_connection() noexcept
 {
     return db;

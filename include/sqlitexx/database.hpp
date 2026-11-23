@@ -1,6 +1,7 @@
 #ifndef SQLITEXX_DATABASE_HPP
 #define SQLITEXX_DATABASE_HPP
 
+#include "sqlitexx/backup.hpp"
 #include "sqlitexx/config.hpp"
 #include "sqlitexx/cstring_view.hpp"
 #include "sqlitexx/error.hpp"
@@ -48,6 +49,20 @@ public:
     // takes (INT_MAX milliseconds, about 24.8 days) waits that long. Coarser durations convert:
     // std::chrono::seconds(5).
     expected<void> busy_timeout(std::chrono::milliseconds timeout);
+
+    // Backup (see sqlitexx/backup.hpp): copies this database over `destination`, replacing everything in it.
+    // backup_to() copies all at once; begin_backup_to() gives a backup to copy in steps. The schemas are "main",
+    // "temp" or the name of an attached database.
+    expected<void> backup_to(
+        database& destination,
+        cstring_view source_schema = "main",
+        cstring_view destination_schema = "main"
+    );
+    expected<backup> begin_backup_to(
+        database& destination,
+        cstring_view source_schema = "main",
+        cstring_view destination_schema = "main"
+    );
 
     // SQL functions written in C++, with the parameters and return type of `function` (see sqlitexx/function.hpp).
     // Registering the same name with the same number of parameters again replaces the function.
