@@ -1,6 +1,8 @@
 #include "impl_sqlitexx.hpp"
 
 #include <cctype>
+#include <chrono>
+#include <limits>
 #include <utility>
 
 namespace sqlitexx
@@ -91,6 +93,20 @@ std::int64_t database::last_insert_rowid() const noexcept
 std::int64_t database::changes() const noexcept
 {
     return db.changes();
+}
+
+expected<void> database::busy_timeout(std::chrono::milliseconds timeout)
+{
+    // The parentheses keep a max macro (<windows.h> without NOMINMAX) out of the call
+    const std::chrono::milliseconds::rep longest = (std::numeric_limits<int>::max)();
+    const std::chrono::milliseconds::rep wanted = timeout.count();
+    const int milliseconds = wanted <= 0 ? 0 : static_cast<int>(wanted < longest ? wanted : longest);
+    const native::result code = db.busy_timeout(milliseconds);
+    if (code.failed())
+    {
+        return expected<void>(unexpect, failure(code));
+    }
+    return {};
 }
 
 native::connection& database::native_connection() noexcept

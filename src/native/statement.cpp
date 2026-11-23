@@ -255,27 +255,30 @@ namespace native
         return sqlite3_column_double(stmt, index);
     }
 
-    string_view statement::column_text(int index) const noexcept
+    optional<cstring_view> statement::column_text(int index) const noexcept
     {
         // Pointer first, then the size: reading the text may convert it, which changes the size.
         const unsigned char* text = sqlite3_column_text(stmt, index);
         if (text == nullptr)
         {
-            return string_view();
+            return nullopt;
         }
         const int bytes = sqlite3_column_bytes(stmt, index);
-        return string_view(reinterpret_cast<const char*>(text), static_cast<std::size_t>(bytes));
+        return cstring_view::assume_terminated(reinterpret_cast<const char*>(text), static_cast<std::size_t>(bytes));
     }
 
-    u16string_view statement::column_text16(int index) const noexcept
+    optional<u16cstring_view> statement::column_text16(int index) const noexcept
     {
         const void* text = sqlite3_column_text16(stmt, index);
         if (text == nullptr)
         {
-            return u16string_view();
+            return nullopt;
         }
         const int bytes = sqlite3_column_bytes16(stmt, index);
-        return u16string_view(static_cast<const char16_t*>(text), static_cast<std::size_t>(bytes) / sizeof(char16_t));
+        return u16cstring_view::assume_terminated(
+            static_cast<const char16_t*>(text),
+            static_cast<std::size_t>(bytes) / sizeof(char16_t)
+        );
     }
 
     const void* statement::column_blob(int index) const noexcept

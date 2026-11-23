@@ -34,6 +34,9 @@ namespace detail
 template <class... T>
 using row = typename detail::row_type<T...>::type;
 
+template <class... T>
+class rows_range;
+
 // A prepared statement with typed binding and reading. Move-only. Every operation that can fail returns
 // expected<...>, so calls chain with and_then / or_else / transform.
 class statement final
@@ -163,12 +166,37 @@ public:
         }
     }
 
+    // The rows as a range of expected<row<T...>>, for a range-based for loop (see sqlitexx/rows.hpp). Not on a
+    // temporary statement: it would be gone before the loop body runs.
+    template <class... T>
+    rows_range<T...> rows() &;
+
+    template <class... T>
+    void rows() && = delete;
+
     // Reading the current row (indexes count from 0)
     template <class T>
     expected<T> column(int index) const
     {
         return read_column<T>(index, detail::is_optional<T>());
     }
+
+    // By name: the first column with this name, compared like SQL identifiers (ASCII letters in either case). A
+    // column's name is its AS alias, or else what SQLite makes of the expression, so give computed columns an alias.
+    // Each call searches the columns: in a loop, look the index up once with column_index().
+    template <class T>
+    expected<T> column(string_view name) const
+    {
+        expected<int> index = column_index(name);
+        if (!index)
+        {
+            return expected<T>(unexpect, index.error());
+        }
+        return column<T>(*index);
+    }
+
+    // The index of the first column with this name; a primary_code::range error when there is none.
+    expected<int> column_index(string_view name) const;
 
     template <class... T>
     expected<row<T...>> read_row() const
@@ -187,6 +215,7 @@ private:
     error failure(native::result code) const;
     error no_rows() const;
     error no_parameter(const char* name) const;
+    error no_column(string_view name) const;
     error null_column(int index) const;
 
     expected<void> check(native::result code) const
@@ -319,5 +348,8 @@ private:
 };
 
 } // sqlitexx
+
+// rows() returns a rows_range, which needs the complete statement above
+#include "sqlitexx/rows.hpp"
 
 #endif // SQLITEXX_STATEMENT_HPP

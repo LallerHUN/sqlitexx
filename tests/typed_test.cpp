@@ -10,25 +10,26 @@
 #include "sqlitexx/sqlitexx.hpp"
 
 #include <cstdint>
+#include <cstring>
+#include <initializer_list>
 #include <limits>
 #include <string>
 #include <tuple>
 #include <utility>
 
 using sqlitexx::blob;
+using sqlitexx::cstring_view;
 using sqlitexx::database;
 using sqlitexx::error;
 using sqlitexx::expected;
 using sqlitexx::optional;
 using sqlitexx::statement;
 using sqlitexx::string_view;
+using sqlitexx::native::extended_code;
 using sqlitexx::native::primary_code;
 
 namespace
 {
-// SQLITE_CONSTRAINT_UNIQUE; the tests do not see sqlite3.h, which sqlitexx links privately
-const int constraint_unique = 19 | (8 << 8);
-
 // An in-memory database with a user table, or an empty one when that fails (the checks then report it)
 database open_users()
 {
@@ -170,6 +171,32 @@ void test_for_each_and_string_view()
     CHECK(known_ages == 1);
 }
 
+void test_cstring_view()
+{
+    database db = open_users();
+    expected<statement> select = db.prepare("SELECT name, age FROM user ORDER BY id");
+    CHECK(select.has_value());
+
+    expected<cstring_view> name = select->first<cstring_view>();
+    CHECK(name && *name == "Alice");
+    CHECK(name && std::strcmp(name->c_str(), "Alice") == 0);
+
+    // Bob's age is NULL: an error for cstring_view, nullopt for optional<cstring_view>
+    CHECK(select->step().has_value());
+    expected<cstring_view> strict = select->column<cstring_view>(1);
+    CHECK(!strict && strict.error().primary() == primary_code::mismatch);
+    expected<optional<cstring_view>> age = select->column<optional<cstring_view>>(1);
+    CHECK(age && !age->has_value());
+
+    expected<statement> insert = db.prepare("INSERT INTO user(name) VALUES(?)");
+    CHECK(insert.has_value());
+    CHECK(insert->execute(cstring_view("Carol")).has_value());
+    expected<statement> count = db.prepare("SELECT count(*) FROM user WHERE name = 'Carol'");
+    CHECK(count.has_value());
+    expected<int> carols = count->first<int>();
+    CHECK(carols && *carols == 1);
+}
+
 void test_errors_carry_codes_and_messages()
 {
     database db = open_users();
@@ -249,7 +276,7 @@ void test_chaining()
                                           )
                                           .or_else(
                                               sqlitexx::on(
-                                                  constraint_unique,
+                                                  extended_code::constraint_unique,
                                                   [](const error&)
                                                   {
                                                       return expected<std::string>(std::string("already there"));
@@ -281,6 +308,99 @@ void test_chaining()
     CHECK(counted.has_value());
     CHECK(rows == 2);
 }
+
+void test_extended_codes()
+{
+    database db = open_users();
+
+    // A NULL name breaks NOT NULL, not UNIQUE
+    expected<void> unnamed = db.execute("INSERT INTO user(name) VALUES(NULL)");
+    CHECK(!unnamed);
+    CHECK(!unnamed && unnamed.error().primary() == primary_code::constraint);
+    CHECK(!unnamed && unnamed.error().code() == extended_code::constraint_notnull);
+    CHECK(!unnamed && unnamed.error().code() != extended_code::constraint_unique);
+
+    // on() with an extended code handles that code only: other constraint errors pass through
+    expected<std::string> passed = db.prepare("INSERT INTO user(name) VALUES(NULL)")
+                                       .and_then(sqlitexx::execute_with())
+                                       .transform(
+                                           []
+                                           {
+                                               return std::string("inserted");
+                                           }
+                                       )
+                                       .or_else(
+                                           sqlitexx::on(
+                                               extended_code::constraint_unique,
+                                               [](const error&)
+                                               {
+                                                   return expected<std::string>(std::string("already there"));
+                                               }
+                                           )
+                                       );
+    CHECK(!passed && passed.error().code() == extended_code::constraint_notnull);
+
+    // A code given as a number still works, for codes the enum doesn't list
+    expected<std::string> numbered = db.prepare("INSERT INTO user(name) VALUES(NULL)")
+                                         .and_then(sqlitexx::execute_with())
+                                         .transform(
+                                             []
+                                             {
+                                                 return std::string("inserted");
+                                             }
+                                         )
+                                         .or_else(
+                                             sqlitexx::on(
+                                                 static_cast<int>(extended_code::constraint_notnull),
+                                                 [](const error&)
+                                                 {
+                                                     return expected<std::string>(std::string("needs a name"));
+                                                 }
+                                             )
+                                         );
+    CHECK(numbered && *numbered == "needs a name");
+}
+
+void test_columns_by_name()
+{
+    database db = open_users();
+    expected<statement> select =
+        db.prepare("SELECT id, name AS Name, age, 1 AS twice, 2 AS twice FROM user ORDER BY id");
+    CHECK(select.has_value());
+    if (!select)
+    {
+        return;
+    }
+    CHECK(select->step().has_value());
+
+    // Names compare like SQL identifiers: ASCII letters in either case
+    expected<std::string> name = select->column<std::string>("name");
+    CHECK(name && *name == "Alice");
+    expected<int> age = select->column<int>(std::string("AGE"));
+    CHECK(age && *age == 31);
+    expected<int> index = select->column_index(string_view("Age"));
+    CHECK(index && *index == 2);
+
+    // A repeated name gives the first column with it
+    expected<int> twice = select->column<int>("twice");
+    CHECK(twice && *twice == 1);
+
+    // Only whole names match
+    for (const char* missing : {"nam", "names", "", "user.name"})
+    {
+        expected<int> none = select->column_index(missing);
+        CHECK(!none && none.error().primary() == primary_code::range);
+        CHECK(!none && none.error().message() == std::string("the statement has no column named ") + missing);
+    }
+
+    // Reading by index still works, and a NULL column's error names the column
+    expected<std::int64_t> id = select->column<std::int64_t>(0);
+    CHECK(id && *id == 1);
+    CHECK(select->step().has_value());
+    expected<int> null_age = select->column<int>("age");
+    CHECK(!null_age && null_age.error().primary() == primary_code::mismatch);
+    CHECK(!null_age && null_age.error().message().find("column 2 (age) is NULL") == 0);
+}
 } // anonymous
 
 int main()
@@ -291,8 +411,11 @@ int main()
     test_integer_ranges();
     test_blob_bool_double_and_named();
     test_for_each_and_string_view();
+    test_cstring_view();
     test_errors_carry_codes_and_messages();
     test_chaining();
+    test_extended_codes();
+    test_columns_by_name();
 
     return test::summary();
 }

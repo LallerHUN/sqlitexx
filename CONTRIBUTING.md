@@ -14,12 +14,13 @@ cmake --build build --config Debug
 ctest --test-dir build --build-config Debug --output-on-failure
 ```
 
-CMake downloads SQLite and expected-lite on the first configure; see the README for the options and for offline
-builds. Build with `SQLITEXX_WARNINGS_AS_ERRORS=ON` locally too: CI does, and a warning fails the pull request.
+CMake downloads SQLite and the backports (expected-lite, string-view-lite, optional-lite) on the first configure; see
+the README for the options and for offline builds. Build with `SQLITEXX_WARNINGS_AS_ERRORS=ON` locally too: CI does,
+and a warning fails the pull request.
 
 CI also builds:
 
-- with C++17, C++20 and C++23, so with both expected-lite and `std::expected`;
+- with C++11, C++14, C++17, C++20 and C++23 (MSVC from C++14), so with both the backports and the standard types;
 - with exceptions disabled (`-fno-exceptions`, or `/EHs-c- -D_HAS_EXCEPTIONS=0` on MSVC);
 - with Clang's AddressSanitizer and UndefinedBehaviorSanitizer;
 - against the system SQLite (`SQLITEXX_USE_SYSTEM_SQLITE=ON`);
@@ -27,6 +28,19 @@ CI also builds:
 
 If you change something that only one of those touches, try it locally the same way; the workflow in
 [.github/workflows/ci.yml](.github/workflows/ci.yml) shows the exact flags.
+
+On Linux, or in WSL on Windows, [tools/check.sh](tools/check.sh) runs all of CI's Linux jobs on your working tree,
+uncommitted changes included, and reports which ones fail:
+
+```shell
+tools/check.sh                   # every job
+tools/check.sh clang-asan format # only these; --list shows the names
+```
+
+It needs gcc, clang, cmake, ninja, the SQLite development files (`libsqlite3-dev`) and clang-format 22.1.3. Build
+directories are kept in `~/.cache/sqlitexx-check`, so a second run only rebuilds what changed. In WSL, run it on the
+Windows checkout (`wsl --cd /mnt/c/<path to sqlitexx> -e bash tools/check.sh`); the builds still go to the Linux
+file system, where they are fast.
 
 ## Where things go
 
@@ -80,17 +94,25 @@ grouped by what they do (lifetime, binding, reading, ...), with a short comment 
 
 ### C++ standard
 
-sqlitexx builds as C++17 today, and C++11 and C++14 support is planned. Keep library code free of C++17-only
-features that have no simple C++11 replacement:
+sqlitexx supports C++11 and newer, and CI builds every standard from C++11 to C++23. Library code, tests and examples
+are all C++11:
 
 - no `if constexpr` (use tag dispatch or overloads), fold expressions, structured bindings, `auto` return type
   deduction, generic lambdas, inline variables, class template argument deduction or `namespace a::b`;
+- nothing from C++14 either: no `std::make_unique`, `std::enable_if_t` and the other `_t` aliases, `constexpr`
+  functions with more than a return statement, variable templates, or digit separators;
 - take vocabulary types from sqlitexx's aliases (`sqlitexx::string_view`, `sqlitexx::optional`,
-  `sqlitexx::expected`), never from `std::` directly, so a backport can be swapped in;
+  `sqlitexx::expected`), never from `std::` directly: before C++17 (or C++23 for `expected`) they are backports;
 - helpers that standard C++ only has from C++14 or C++17 on live in `detail/utility.hpp` (`index_sequence`,
   `apply`).
 
-Tests and examples may use C++17 freely.
+Tests and examples follow the same rules, since CI builds them as C++11 too.
+
+Support for types from newer standards (`std::byte`, `std::span`, `char8_t`) lives in headers of its own
+([value_bytes.hpp](include/sqlitexx/value_bytes.hpp), [value_char8.hpp](include/sqlitexx/value_char8.hpp)), behind
+feature-test macros such as `__cpp_lib_span`. Code behind such a macro may use the standard it tests for. It only adds
+new `value_traits` specializations and never changes an existing declaration, so translation units compiled with
+different standards still agree on every type they share.
 
 ### Errors, never exceptions
 

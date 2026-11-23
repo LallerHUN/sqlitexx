@@ -3,9 +3,10 @@
 
 // Build configuration and vocabulary types.
 //
-// Every public header gets its vocabulary types (string_view, optional, and later span) from here, never from std::
-// directly, and expected from sqlitexx/expected.hpp. When C++11/14 support arrives, the std types here get backports
-// too, chosen by CMake once per build the way expected already is: one choice per translation unit would break the ODR.
+// Every public header gets its vocabulary types (string_view, optional) from here, never from std:: directly, and
+// expected from sqlitexx/expected.hpp. They are the std:: types from C++17, or the string-view-lite and optional-lite
+// backports, as CMake chose when sqlitexx was configured (see SQLITEXX_CXX17_TYPES in CMakeLists.txt). The choice is
+// made once per build: one choice per translation unit would break the ODR.
 
 #if defined(_MSVC_LANG)
 #define SQLITEXX_CPLUSPLUS _MSVC_LANG
@@ -13,8 +14,20 @@
 #define SQLITEXX_CPLUSPLUS __cplusplus
 #endif
 
+#if SQLITEXX_CPLUSPLUS < 201103L
+#error "sqlitexx needs C++11 or newer"
+#endif
+
+#if !defined(SQLITEXX_USE_STD_CXX17_TYPES)
+// Linking the sqlitexx CMake target defines it. Without CMake, define it the way the library was built: 0 for the
+// backports, 1 for the std:: types.
+#error "SQLITEXX_USE_STD_CXX17_TYPES is not defined: link the sqlitexx CMake target (see sqlitexx/config.hpp)"
+#endif
+
+#if SQLITEXX_USE_STD_CXX17_TYPES
+
 #if SQLITEXX_CPLUSPLUS < 201703L
-#error "sqlitexx currently needs C++17 or newer (C++11 and C++14 support is planned)"
+#error "This sqlitexx was built with std::string_view and std::optional, so code using it needs C++17 as well"
 #endif
 
 #include <optional>
@@ -22,10 +35,27 @@
 
 namespace sqlitexx
 {
+using std::basic_string_view;
 using std::nullopt;
 using std::optional;
 using std::string_view;
 using std::u16string_view;
 } // sqlitexx
+
+#else
+
+#include <nonstd/optional.hpp>
+#include <nonstd/string_view.hpp>
+
+namespace sqlitexx
+{
+using nonstd::basic_string_view;
+using nonstd::nullopt;
+using nonstd::optional;
+using nonstd::string_view;
+using nonstd::u16string_view;
+} // sqlitexx
+
+#endif
 
 #endif // SQLITEXX_CONFIG_HPP

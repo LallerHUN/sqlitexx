@@ -78,13 +78,50 @@ void test_bind_step_and_columns()
     CHECK(std::memcmp(select.column_blob(3), bytes, 3) == 0);
 
     CHECK(select.step().row());
+    // An empty string is text, so an empty view, never nullopt; NULL is nullopt
     CHECK(select.column_type(0) == value_type::text);
-    CHECK(select.column_text(0).empty());
+    CHECK(select.column_text(0).has_value());
+    CHECK(select.column_text(0) && select.column_text(0)->empty());
     CHECK(select.column_int64(1) == 5000000000LL);
     CHECK(select.column_type(2) == value_type::null);
-    CHECK(select.column_text(2).empty());
+    CHECK(!select.column_text(2));
+    CHECK(!select.column_text16(2));
 
     CHECK(select.step().done());
+}
+
+void test_text_is_terminated()
+{
+    connection db;
+    CHECK(db.open(":memory:").ok());
+
+    statement stmt;
+    CHECK(db.prepare("SELECT ?, ?, x'', 42", stmt).ok());
+    // Bound without a terminator: only the first two characters of "abc"
+    CHECK(stmt.bind_text(1, string_view("abc", 2)).ok());
+    // A '\0' inside the text
+    CHECK(stmt.bind_text(2, string_view("a\0b", 3)).ok());
+    CHECK(stmt.step().row());
+
+    sqlitexx::optional<sqlitexx::cstring_view> text = stmt.column_text(0);
+    CHECK(text && text->size() == 2);
+    CHECK(text && std::strcmp(text->c_str(), "ab") == 0);
+    CHECK(text && (*text)[2] == '\0');
+
+    // size() counts the inner '\0'; a C function stops at it
+    text = stmt.column_text(1);
+    CHECK(text && text->size() == 3);
+    CHECK(text && std::strlen(text->c_str()) == 1);
+    CHECK(text && (*text)[3] == '\0');
+
+    // A zero-length blob read as text is an empty string, not "no text"
+    CHECK(stmt.column_blob(2) == nullptr);
+    text = stmt.column_text(2);
+    CHECK(text && text->empty() && *text->c_str() == '\0');
+
+    // Numbers convert to text
+    CHECK(stmt.column_text(3) == "42");
+    CHECK(stmt.column_text16(3) == u"42");
 }
 
 void test_prepare_errors_and_tail()
@@ -125,6 +162,9 @@ void test_constraint_is_extended()
     const result rc = insert.step();
     CHECK(rc == primary_code::constraint);
     CHECK(rc.code() != static_cast<int>(primary_code::constraint)); // SQLITE_CONSTRAINT_UNIQUE, not the bare code
+    CHECK(rc == extended_code::constraint_unique);
+    CHECK(!(rc != extended_code::constraint_unique));
+    CHECK(rc != extended_code::constraint_primarykey);
     CHECK(db.extended_errcode() == rc);
 }
 
@@ -156,6 +196,7 @@ int main()
     test_open_and_exec();
     test_failed_open_keeps_message();
     test_bind_step_and_columns();
+    test_text_is_terminated();
     test_prepare_errors_and_tail();
     test_constraint_is_extended();
     test_moves_and_statement_outliving_connection();
