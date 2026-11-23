@@ -5,6 +5,7 @@
 
 #include "sqlitexx/chain.hpp"
 #include "sqlitexx/config.hpp"
+#include "sqlitexx/cstring_view.hpp"
 #include "sqlitexx/database.hpp"
 #include "sqlitexx/error.hpp"
 #include "sqlitexx/expected.hpp"

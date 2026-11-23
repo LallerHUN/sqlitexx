@@ -2,6 +2,7 @@
 #define SQLITEXX_NATIVE_STATEMENT_HPP
 
 #include "sqlitexx/config.hpp"
+#include "sqlitexx/cstring_view.hpp"
 #include "sqlitexx/native/flags.hpp"
 #include "sqlitexx/native/result.hpp"
 
@@ -101,10 +102,15 @@ namespace native
         std::int64_t column_int64(int index) const noexcept;
         double column_double(int index) const noexcept;
 
-        // The returned views stay valid until the next step(), reset() or finalize(), or until the same column is
-        // read in another encoding. A NULL value reads as an empty view.
-        string_view column_text(int index) const noexcept;
-        u16string_view column_text16(int index) const noexcept;
+        // The text of a column, always followed by a '\0' (see cstring_view). nullopt when SQLite has no text to give,
+        // as sqlite3_column_text returns NULL: for a NULL value, or when converting the value to text ran out of
+        // memory (column_type() or connection::extended_errcode() tells which). An empty string is an empty view,
+        // never nullopt. The view stays valid until the next step(), reset() or finalize(), or until the same column
+        // is read in another encoding.
+        optional<cstring_view> column_text(int index) const noexcept;
+        optional<u16cstring_view> column_text16(int index) const noexcept;
+
+        // As in C: NULL for a NULL value and for a zero-length blob alike, so check column_type() or column_bytes().
         const void* column_blob(int index) const noexcept;
         std::size_t column_bytes(int index) const noexcept;
 

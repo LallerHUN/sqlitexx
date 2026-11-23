@@ -10,12 +10,14 @@
 #include "sqlitexx/sqlitexx.hpp"
 
 #include <cstdint>
+#include <cstring>
 #include <limits>
 #include <string>
 #include <tuple>
 #include <utility>
 
 using sqlitexx::blob;
+using sqlitexx::cstring_view;
 using sqlitexx::database;
 using sqlitexx::error;
 using sqlitexx::expected;
@@ -170,6 +172,32 @@ void test_for_each_and_string_view()
     CHECK(known_ages == 1);
 }
 
+void test_cstring_view()
+{
+    database db = open_users();
+    expected<statement> select = db.prepare("SELECT name, age FROM user ORDER BY id");
+    CHECK(select.has_value());
+
+    expected<cstring_view> name = select->first<cstring_view>();
+    CHECK(name && *name == "Alice");
+    CHECK(name && std::strcmp(name->c_str(), "Alice") == 0);
+
+    // Bob's age is NULL: an error for cstring_view, nullopt for optional<cstring_view>
+    CHECK(select->step().has_value());
+    expected<cstring_view> strict = select->column<cstring_view>(1);
+    CHECK(!strict && strict.error().primary() == primary_code::mismatch);
+    expected<optional<cstring_view>> age = select->column<optional<cstring_view>>(1);
+    CHECK(age && !age->has_value());
+
+    expected<statement> insert = db.prepare("INSERT INTO user(name) VALUES(?)");
+    CHECK(insert.has_value());
+    CHECK(insert->execute(cstring_view("Carol")).has_value());
+    expected<statement> count = db.prepare("SELECT count(*) FROM user WHERE name = 'Carol'");
+    CHECK(count.has_value());
+    expected<int> carols = count->first<int>();
+    CHECK(carols && *carols == 1);
+}
+
 void test_errors_carry_codes_and_messages()
 {
     database db = open_users();
@@ -291,6 +319,7 @@ int main()
     test_integer_ranges();
     test_blob_bool_double_and_named();
     test_for_each_and_string_view();
+    test_cstring_view();
     test_errors_carry_codes_and_messages();
     test_chaining();
 

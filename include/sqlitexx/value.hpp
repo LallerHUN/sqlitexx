@@ -3,8 +3,8 @@
 
 // How C++ types become statement parameters and how column values become C++ types.
 //
-// Built in: integers, bool, floating point, std::string, string_view, const char* (binding only), nullptr (binding
-// only), blob, and optional<T> of any of these for nullable values. Other types plug in by specializing
+// Built in: integers, bool, floating point, std::string, string_view, cstring_view, const char* (binding only), nullptr
+// (binding only), blob, and optional<T> of any of these for nullable values. Other types plug in by specializing
 // value_traits:
 //
 //     template <>
@@ -18,6 +18,7 @@
 // (primary_code::mismatch) before read() is reached.
 
 #include "sqlitexx/config.hpp"
+#include "sqlitexx/cstring_view.hpp"
 #include "sqlitexx/expected.hpp"
 #include "sqlitexx/native/statement.hpp"
 
@@ -50,6 +51,26 @@ namespace detail
     inline native::result mismatch_result() noexcept
     {
         return native::result(static_cast<int>(native::primary_code::mismatch));
+    }
+
+    // The text of a non-NULL column. SQLite gives none only when converting the value to text ran out of memory.
+    inline expected<cstring_view> read_text(
+        const native::statement& stmt,
+        int index
+    )
+    {
+        const optional<cstring_view> text = stmt.column_text(index);
+        if (!text)
+        {
+            return expected<cstring_view>(
+                unexpect,
+                error(
+                    native::result(static_cast<int>(native::primary_code::nomem)),
+                    "column " + std::to_string(index) + ": out of memory converting the value to text"
+                )
+            );
+        }
+        return *text;
     }
 
     inline error out_of_range(int index)
@@ -236,8 +257,12 @@ struct value_traits<std::string>
         int index
     )
     {
-        const string_view text = stmt.column_text(index);
-        return std::string(text.data(), text.size());
+        const expected<cstring_view> text = detail::read_text(stmt, index);
+        if (!text)
+        {
+            return expected<std::string>(unexpect, text.error());
+        }
+        return std::string(text->data(), text->size());
     }
 };
 
@@ -259,7 +284,34 @@ struct value_traits<string_view>
         int index
     )
     {
-        return stmt.column_text(index);
+        const expected<cstring_view> text = detail::read_text(stmt, index);
+        if (!text)
+        {
+            return expected<string_view>(unexpect, text.error());
+        }
+        return text->view();
+    }
+};
+
+// Like string_view, and always followed by a '\0', so c_str() can go to C functions.
+template <>
+struct value_traits<cstring_view>
+{
+    static native::result bind(
+        native::statement& stmt,
+        int index,
+        cstring_view value
+    ) noexcept
+    {
+        return stmt.bind_text(index, value.view());
+    }
+
+    static expected<cstring_view> read(
+        const native::statement& stmt,
+        int index
+    )
+    {
+        return detail::read_text(stmt, index);
     }
 };
 

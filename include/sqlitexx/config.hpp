@@ -35,6 +35,7 @@
 
 namespace sqlitexx
 {
+using std::basic_string_view;
 using std::nullopt;
 using std::optional;
 using std::string_view;
@@ -48,6 +49,7 @@ using std::u16string_view;
 
 namespace sqlitexx
 {
+using nonstd::basic_string_view;
 using nonstd::nullopt;
 using nonstd::optional;
 using nonstd::string_view;
