@@ -16,5 +16,7 @@
 #include "sqlitexx/statement.hpp"
 #include "sqlitexx/transaction.hpp"
 #include "sqlitexx/value.hpp"
+#include "sqlitexx/value_bytes.hpp"
+#include "sqlitexx/value_char8.hpp"
 
 #endif // SQLITEXX_SQLITEXX_HPP

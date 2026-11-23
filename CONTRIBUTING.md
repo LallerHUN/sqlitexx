@@ -108,6 +108,12 @@ are all C++11:
 
 Tests and examples follow the same rules, since CI builds them as C++11 too.
 
+Support for types from newer standards (`std::byte`, `std::span`, `char8_t`) lives in headers of its own
+([value_bytes.hpp](include/sqlitexx/value_bytes.hpp), [value_char8.hpp](include/sqlitexx/value_char8.hpp)), behind
+feature-test macros such as `__cpp_lib_span`. Code behind such a macro may use the standard it tests for. It only adds
+new `value_traits` specializations and never changes an existing declaration, so translation units compiled with
+different standards still agree on every type they share.
+
 ### Errors, never exceptions
 
 - sqlitexx never throws. Functions that can fail return `expected<T, error>` (typed layer) or `native::result`

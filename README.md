@@ -179,6 +179,11 @@ For an offline build, unpack the dependencies yourself and point CMake at them w
 | `const char*` | as text, or NULL for `nullptr` | not readable |
 | `nullptr` | NULL | not readable |
 | `sqlitexx::blob` (`std::vector<unsigned char>`) | as a blob | |
+| `std::vector<std::byte>` (C++17) | as a blob | |
+| `std::span<const std::byte>`, `std::span<const unsigned char>` (C++20) | as a blob, without copying it first | a view into SQLite's memory until the next step |
+| `std::span` of writable bytes, or with a fixed extent (C++20) | as a blob | not readable |
+| `std::u8string`, `std::u8string_view`, `u8cstring_view` (C++20) | as UTF-8 text | like their `char` counterparts |
+| `const char8_t*`, such as `u8"..."` (C++20) | as UTF-8 text, or NULL for `nullptr` | not readable |
 | `optional<T>` | NULL when empty | NULL becomes an empty optional |
 
 Reading NULL into anything other than `optional<T>` is an error. Your own types plug in by specializing
