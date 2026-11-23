@@ -6,6 +6,18 @@ All notable changes to sqlitexx are listed here. The format is based on
 
 ## [Unreleased]
 
+### Added
+
+- `database::create_function(name, callable, flags)`: SQL functions written in C++. Arguments and results go through
+  `value_traits`; an `expected<T>` result or (with exceptions enabled) an exception fails the call with its code and
+  message. `native::function_flags` marks a function `deterministic`, `directonly` or `innocuous`.
+- Native layer: `connection::create_function`, `native::value` for arguments and `native::context` for results.
+
+### Changed
+
+- The built-in `value_traits` take the statement as a template parameter, so they serve SQL functions as well. Traits
+  written for `native::statement` keep working with statements.
+
 ## [0.2.0] - 2026-11-23
 
 ### Added

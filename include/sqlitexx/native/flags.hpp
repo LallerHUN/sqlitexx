@@ -33,6 +33,19 @@ namespace native
         no_vtab = 0x04,
     };
 
+    // How an SQL function behaves (connection::create_function). Values match SQLITE_DETERMINISTIC,
+    // SQLITE_DIRECTONLY and SQLITE_INNOCUOUS in sqlite3.h; the text encoding is always UTF-8.
+    enum class function_flags : int
+    {
+        none = 0,
+        // The same arguments always give the same result, so SQLite may evaluate it once and use it in indexes
+        deterministic = 0x00000800,
+        // Only callable from top-level SQL, not from triggers, views, CHECK constraints or generated columns
+        directonly = 0x00080000,
+        // Harmless even when called from a schema someone else wrote
+        innocuous = 0x00200000,
+    };
+
     // How a bound text or blob is held by SQLite.
     enum class bind_mode
     {
@@ -67,6 +80,22 @@ namespace native
     ) noexcept
     {
         return static_cast<open_flags>(static_cast<int>(lhs) & static_cast<int>(rhs));
+    }
+
+    constexpr function_flags operator|(
+        function_flags lhs,
+        function_flags rhs
+    ) noexcept
+    {
+        return static_cast<function_flags>(static_cast<int>(lhs) | static_cast<int>(rhs));
+    }
+
+    constexpr function_flags operator&(
+        function_flags lhs,
+        function_flags rhs
+    ) noexcept
+    {
+        return static_cast<function_flags>(static_cast<int>(lhs) & static_cast<int>(rhs));
     }
 
     constexpr prepare_flags operator|(
