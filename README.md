@@ -187,6 +187,25 @@ too, so one kind of check covers both:
 | `execute_with(args...)` | `and_then` | binds `args` and runs the statement to completion |
 | `on(code, handler)` | `or_else` | handles errors with that code |
 
+### Transactions
+
+`sqlitexx::in_transaction` runs a function in a transaction: it commits when the function returns a value and rolls
+back when it returns an error.
+
+```cpp
+sql::expected<std::int64_t> id = sql::in_transaction(db, [&] {
+    return db.prepare("INSERT INTO user(name) VALUES(?)")
+        .and_then(sql::execute_with("Carol"))
+        .transform([&] { return db.last_insert_rowid(); });
+});
+```
+
+For more control, `sqlitexx::transaction::begin(db, mode)` gives a transaction object that rolls back when it goes
+out of scope unless `commit()` succeeded. `mode` is `transaction_mode::deferred` (the default), `immediate` or
+`exclusive`, as in SQL's `BEGIN`. When `commit()` fails, `active()` tells whether the transaction is still open: it
+is after a deferred constraint violation or `SQLITE_BUSY`, so you can fix the data or retry, while some other errors
+make SQLite roll back on its own. A transaction must not outlive its database.
+
 ### std::expected or expected-lite
 
 `sqlitexx::expected` is `std::expected` or expected-lite's, depending on `SQLITEXX_EXPECTED`. CMake decides once and

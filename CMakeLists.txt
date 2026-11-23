@@ -178,6 +178,7 @@ add_library(sqlitexx STATIC
     src/native/result.cpp
     src/native/statement.cpp
     src/statement.cpp
+    src/transaction.cpp
 )
 add_library(sqlitexx::sqlitexx ALIAS sqlitexx)
 
