@@ -114,7 +114,7 @@ cmake --install build --config Release --prefix <prefix>
 ```
 
 ```cmake
-find_package(sqlitexx 0.1 REQUIRED) # with <prefix> in CMAKE_PREFIX_PATH
+find_package(sqlitexx 0.2 REQUIRED) # with <prefix> in CMAKE_PREFIX_PATH
 target_link_libraries(my_app PRIVATE sqlitexx::sqlitexx)
 ```
 
