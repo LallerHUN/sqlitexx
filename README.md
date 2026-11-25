@@ -351,9 +351,10 @@ out->write(chunk);                        // continues from the position each ti
 sql::expected<sql::blob_stream> in = db.open_blob("file", "data", rowid);
 std::vector<unsigned char> all;
 in->read(all);                            // the rest of the blob; all.size() is what was read
+sql::expected<std::size_t> got = in->read(all, 4096);   // at most 4096 bytes; *got == all.size()
 
 std::array<unsigned char, 4096> buffer;   // or in pieces, without allocating
-sql::expected<std::size_t> got = in->read(buffer);   // up to buffer.size(); 0 at the end
+sql::expected<std::size_t> filled = in->read(buffer);   // up to buffer.size(); 0 at the end
 ```
 
 - `write()` takes any contiguous container of bytes (`std::vector`, `std::string`, `std::array`, `std::span`,
