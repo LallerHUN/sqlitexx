@@ -6,6 +6,13 @@ All notable changes to sqlitexx are listed here. The format is based on
 
 ## [Unreleased]
 
+### Added
+
+- Rows as structs: `SQLITEXX_FIELDS(user, name, age)` names the members that columns go into, and `user` can then be
+  read wherever a row is read (`query<user>`, `first()`, `all()`, `next()`, `rows<user>()`, `for_each_row<user>`).
+  Fields are filled from the columns by name; a missing column is an error, extra columns are ignored. The macro
+  defines `sqlitexx_fields()`, which can also be written by hand with `sqlitexx::fields` and `sqlitexx::field`.
+
 ## [0.5.0] - 2026-11-25
 
 ### Added

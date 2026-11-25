@@ -5,6 +5,7 @@
 /// Whether binding and reading types cannot throw, for the noexcept of the statement calls that bind and read them:
 /// they are noexcept exactly when the value_traits they use are.
 
+#include "sqlitexx/detail/row_fields.hpp"
 #include "sqlitexx/native/statement.hpp"
 #include "sqlitexx/value.hpp"
 
@@ -41,12 +42,31 @@ namespace detail
     {
     };
 
-    /// Reading a column as T, and moving the value on
-    template <class T>
+    /// Reading a column as T, and moving the value on. A struct with fields is read by looking up each field's column
+    /// and reading it into the member.
+    template <class T, bool Fields = has_fields<T>::value>
     struct reads_noexcept : std::integral_constant<
                                 bool,
                                 noexcept(value_traits<T>::read(std::declval<const native::statement&>(), 0))
                                     && std::is_nothrow_move_constructible<T>::value>
+    {
+    };
+
+    template <class T, class Members>
+    struct fields_read_noexcept;
+
+    template <class T, class... Member>
+    struct fields_read_noexcept<T, std::tuple<Member...>>
+        : std::integral_constant<
+              bool,
+              all_of<reads_noexcept<Member>...>::value && all_of<std::is_nothrow_move_assignable<Member>...>::value
+                  && std::is_nothrow_default_constructible<T>::value && std::is_nothrow_move_constructible<T>::value>
+    {
+    };
+
+    template <class T>
+    struct reads_noexcept<T, true>
+        : fields_read_noexcept<T, typename field_member_types<typename field_list<T>::type>::type>
     {
     };
 

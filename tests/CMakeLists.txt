@@ -5,6 +5,7 @@ foreach(test_name
     busy_timeout_test
     collation_test
     cstring_view_test
+    fields_test
     function_test
     hooks_test
     native_test

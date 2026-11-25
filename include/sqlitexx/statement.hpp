@@ -214,9 +214,15 @@ public:
     /// The index of the first column with this name; a primary_code::range error when there is none.
     SQLITEXX_DETAIL_NODISCARD expected<int> column_index(string_view name) const noexcept;
 
+    /// The current row: the value for one column, a std::tuple for several, or a struct with fields
+    /// (sqlitexx/fields.hpp), filled from the columns by name.
     template <class... T>
     SQLITEXX_DETAIL_NODISCARD expected<row<T...>> read_row() const noexcept(detail::row_reads_noexcept<T...>::value)
     {
+        static_assert(
+            sizeof...(T) == 1 || !detail::any_has_fields<T...>::value,
+            "a struct with fields is read on its own: read_row<my_struct>(), not alongside other types"
+        );
         return read_row_impl<T...>(std::integral_constant<bool, sizeof...(T) == 1>());
     }
 
@@ -297,7 +303,76 @@ private:
     template <class T>
     expected<T> read_row_impl(std::true_type /*single column*/) const noexcept(detail::reads_noexcept<T>::value)
     {
+        return read_single<T>(detail::has_fields<T>());
+    }
+
+    template <class T>
+    expected<T> read_single(std::false_type /*fields*/) const noexcept(detail::reads_noexcept<T>::value)
+    {
         return column<T>(0);
+    }
+
+    /// A struct: each field from the column with its name
+    template <class T>
+    expected<T> read_single(std::true_type /*fields*/) const noexcept(detail::reads_noexcept<T>::value)
+    {
+        static_assert(
+            !detail::has_read_traits<T>::value,
+            "this type has both value_traits and fields: drop one, so it is clear whether it fills one column or a row"
+        );
+        static_assert(
+            std::is_default_constructible<T>::value,
+            "a struct with fields must be default-constructible: sqlitexx makes it, then fills its fields"
+        );
+        using list_type = typename detail::field_list<T>::type;
+        const list_type list = sqlitexx_fields(static_cast<const T*>(nullptr));
+        T value{};
+        expected<void> filled =
+            read_fields<0>(value, list, std::integral_constant<bool, std::tuple_size<list_type>::value == 0>());
+        if (!filled)
+        {
+            return expected<T>(unexpect, std::move(filled.error()));
+        }
+        return expected<T>(std::move(value));
+    }
+
+    template <
+        std::size_t I,
+        class T,
+        class List>
+    expected<void> read_fields(
+        T&,
+        const List&,
+        std::true_type /*past the end*/
+    ) const noexcept
+    {
+        return {};
+    }
+
+    template <
+        std::size_t I,
+        class T,
+        class List>
+    expected<void> read_fields(
+        T& value,
+        const List& list,
+        std::false_type /*past the end*/
+    ) const noexcept(detail::reads_noexcept<T>::value)
+    {
+        using member = typename detail::field_member<typename std::tuple_element<I, List>::type>::type;
+        const typename std::tuple_element<I, List>::type& field = std::get<I>(list);
+        expected<int> index = column_index(field.name);
+        if (!index)
+        {
+            return expected<void>(unexpect, std::move(index.error()));
+        }
+        expected<member> read = column<member>(*index);
+        if (!read)
+        {
+            return expected<void>(unexpect, std::move(read.error()));
+        }
+        value.*(field.member) = std::move(*read);
+        return read_fields<I + 1>(value, list, std::integral_constant<bool, I + 1 == std::tuple_size<List>::value>());
     }
 
     template <class... T>

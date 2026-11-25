@@ -8,9 +8,11 @@
 /// compile time.
 
 #include "sqlitexx/detail/noexcept_traits.hpp"
+#include "sqlitexx/detail/row_fields.hpp"
 #include "sqlitexx/detail/utility.hpp"
 #include "sqlitexx/value.hpp"
 
+#include <tuple>
 #include <type_traits>
 
 /// The static_assert message for reading a view out of a statement that is about to end
@@ -43,6 +45,21 @@ namespace detail
     template <class... T>
     struct any_reads_view
         : std::integral_constant<bool, !all_of<std::integral_constant<bool, !reads_view<T>::value>...>::value>
+    {
+    };
+
+    /// A struct with fields is a view when one of its members is
+    template <class Members>
+    struct any_member_reads_view;
+
+    template <class... Member>
+    struct any_member_reads_view<std::tuple<Member...>> : any_reads_view<Member...>
+    {
+    };
+
+    template <class T>
+    struct reads_view<T, typename std::enable_if<has_fields<T>::value>::type>
+        : any_member_reads_view<typename field_member_types<typename field_list<T>::type>::type>
     {
     };
 } // detail

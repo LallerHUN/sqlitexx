@@ -6,9 +6,18 @@
 #include <cstdint>
 #include <cstdio>
 #include <string>
-#include <tuple>
 
 namespace sql = sqlitexx;
+
+// The rows of the user table; SQLITEXX_FIELDS names the members that columns go into
+struct user
+{
+    std::string name;
+    sql::optional<int> age;
+};
+// clang-format off
+SQLITEXX_FIELDS(user, name, age)
+// clang-format on
 
 int main()
 {
@@ -44,19 +53,18 @@ int main()
         return 1;
     }
 
-    // 3. Read: one type per column, a std::tuple for several. Each row is an expected, so errors can't slip through.
+    // 3. Read: rows into a struct, each field from the column with its name. Each row is an expected, so errors can't
+    // slip through.
     bool listed = true;
-    for (sql::expected<std::tuple<std::string, sql::optional<int>>>& user :
-         db.query<std::string, sql::optional<int>>("SELECT name, age FROM user ORDER BY id"))
+    for (sql::expected<user>& u : db.query<user>("SELECT name, age FROM user ORDER BY id"))
     {
-        if (!user)
+        if (!u)
         {
-            std::printf("cannot list: %s\n", user.error().message().c_str());
+            std::printf("cannot list: %s\n", u.error().message().c_str());
             listed = false;
             break;
         }
-        const sql::optional<int>& age = std::get<1>(*user);
-        std::printf("%s: %s\n", std::get<0>(*user).c_str(), age ? std::to_string(*age).c_str() : "unknown");
+        std::printf("%s: %s\n", u->name.c_str(), u->age ? std::to_string(*u->age).c_str() : "unknown");
     }
 
     // One row: first()

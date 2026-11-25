@@ -14,6 +14,7 @@
 #include "sqlitexx/database.hpp"
 #include "sqlitexx/error.hpp"
 #include "sqlitexx/expected.hpp"
+#include "sqlitexx/fields.hpp"
 #include "sqlitexx/function.hpp"
 #include "sqlitexx/hooks.hpp"
 #include "sqlitexx/native/backup.hpp"
