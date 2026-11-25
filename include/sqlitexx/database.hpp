@@ -6,11 +6,13 @@
 #include "sqlitexx/config.hpp"
 #include "sqlitexx/cstring_view.hpp"
 #include "sqlitexx/detail/hook_slots.hpp"
+#include "sqlitexx/detail/noexcept_traits.hpp"
 #include "sqlitexx/error.hpp"
 #include "sqlitexx/expected.hpp"
 #include "sqlitexx/native/connection.hpp"
 #include "sqlitexx/native/flags.hpp"
 #include "sqlitexx/registrations.hpp"
+#include "sqlitexx/results.hpp"
 #include "sqlitexx/statement.hpp"
 
 #include <chrono>
@@ -43,12 +45,73 @@ public:
     ///@}
 
     /// \name Statements
-    /// execute() runs one or more semicolon-separated statements and discards their rows. prepare()
-    /// takes exactly one statement: SQL holding none, or several, is a primary_code::misuse error rather than
-    /// silently ignoring the rest.
+    /// query() gives the rows of a query; execute() runs SQL whose rows aren't wanted; prepare() gives a statement to
+    /// run many times. The forms with arguments bind them to parameters 1, 2, 3, ... and take exactly one statement:
+    /// SQL holding none, or several, is a primary_code::misuse error rather than silently ignoring the rest. So does
+    /// prepare(sql). execute(sql) without arguments runs a script of semicolon-separated statements.
+    ///
+    ///     for (expected<std::tuple<std::string, int>>& user : db.query<std::string, int>(sql, 18)) { ... }
+    ///     expected<std::int64_t> count = db.query<std::int64_t>("SELECT count(*) FROM user").first();
+    ///     expected<void> added = db.execute("INSERT INTO user(name, age) VALUES(?, ?)", "Dee", 41);
+    ///
+    /// query() and execute(sql, args...) prepare the SQL on every call; for SQL run many times, prepare it once.
     ///@{
+
+    /// The rows of one statement, with its parameters bound to `args`: one column per type, read as you iterate
+    /// (see sqlitexx/results.hpp). Errors, from preparing on, come out as the elements, or from first() and all().
+    template <
+        class... T,
+        class... Args>
+    SQLITEXX_DETAIL_NODISCARD results<T...> query(
+        string_view sql,
+        const Args&... args
+    ) noexcept(detail::all_bind_noexcept<Args...>::value)
+    {
+        static_assert(sizeof...(T) > 0, "query<T...>: name the type of each column to read");
+        return results<T...>(prepare_bound(sql, args...));
+    }
+
     SQLITEXX_DETAIL_NODISCARD expected<void> execute(const char* sql) noexcept;
+
+    /// Runs one statement with its parameters bound to `args` and discards its rows: INSERT, UPDATE, DELETE.
+    template <
+        class First,
+        class... Rest>
+    SQLITEXX_DETAIL_NODISCARD expected<void> execute(
+        string_view sql,
+        const First& first,
+        const Rest&... rest
+    ) noexcept(detail::
+                   all_bind_noexcept<
+                       First,
+                       Rest...>::value)
+    {
+        expected<statement> prepared = prepare(sql);
+        if (!prepared)
+        {
+            return expected<void>(unexpect, std::move(prepared.error()));
+        }
+        return prepared->execute(first, rest...);
+    }
+
     SQLITEXX_DETAIL_NODISCARD expected<statement> prepare(string_view sql) noexcept;
+
+    /// prepare(sql), then bind(args...): a statement ready to step, to iterate with rows() or to run again with
+    /// statement::execute().
+    template <
+        class First,
+        class... Rest>
+    SQLITEXX_DETAIL_NODISCARD expected<statement> prepare(
+        string_view sql,
+        const First& first,
+        const Rest&... rest
+    ) noexcept(detail::
+                   all_bind_noexcept<
+                       First,
+                       Rest...>::value)
+    {
+        return prepare_bound(sql, first, rest...);
+    }
     ///@}
 
     /// \name State
@@ -227,6 +290,26 @@ private:
     std::unique_ptr<detail::hook_slots> hooks;
 
     explicit database(native::connection&& opened) noexcept;
+
+    /// prepare(sql), then bind(args...), for any number of arguments
+    template <class... Args>
+    expected<statement> prepare_bound(
+        string_view sql,
+        const Args&... args
+    ) noexcept(detail::all_bind_noexcept<Args...>::value)
+    {
+        expected<statement> prepared = prepare(sql);
+        if (!prepared)
+        {
+            return prepared;
+        }
+        expected<void> bound = prepared->bind(args...);
+        if (!bound)
+        {
+            return expected<statement>(unexpect, std::move(bound.error()));
+        }
+        return prepared;
+    }
 
     error failure(native::result code) const noexcept;
 

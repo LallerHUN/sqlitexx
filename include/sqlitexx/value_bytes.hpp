@@ -92,6 +92,8 @@ struct value_traits<
     typename std::enable_if<detail::is_blob_byte<std::remove_const_t<Byte>>::value>::type>
 {
     using span = std::span<Byte, Extent>;
+    /// Reading gives a view into SQLite's memory (see sqlitexx/results.hpp)
+    static constexpr bool reads_view = true;
 
     template <class Target>
     static native::result bind(
