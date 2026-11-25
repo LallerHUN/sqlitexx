@@ -144,6 +144,17 @@ error blob_stream::failure(native::result code) const
     return detail::make_error(db, code);
 }
 
+error blob_stream::too_many(
+    std::size_t count,
+    std::size_t available
+) const
+{
+    return error(
+        native::result(SQLITE_RANGE),
+        "a count of " + std::to_string(count) + " bytes is more than the container's " + std::to_string(available)
+    );
+}
+
 error blob_stream::not_open() const
 {
     return error(native::result(SQLITE_MISUSE), "the blob stream is not open");

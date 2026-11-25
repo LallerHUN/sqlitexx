@@ -16,8 +16,10 @@ All notable changes to sqlitexx are listed here. The format is based on
   database to a file. `begin_backup_to(destination)` gives a `backup` that copies in steps with progress. Native
   layer: `native::backup`.
 - `database::open_blob(table, column, rowid, access)` gives a `blob_stream` for reading and writing a blob in pieces,
-  with `read`, `write`, `seek` and `reopen`. `zeroblob{size}` binds a blob of zero bytes to reserve the space without
-  building it in memory. Native layer: `native::blob_handle`.
+  with `read`, `write`, `seek` and `reopen`. `write` takes any contiguous container of bytes; `read` sizes a
+  growable container to what was read, or fills a fixed-size buffer without allocating. Both take an optional
+  `count`: the most bytes to read, or the first bytes to write. `zeroblob{size}` binds a blob of zero bytes to
+  reserve the space without building it in memory. Native layer: `native::blob_handle`.
 
 ### Changed
 
