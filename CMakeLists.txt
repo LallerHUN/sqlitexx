@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 project(sqlitexx
-    VERSION 0.2.0
+    VERSION 0.3.0
     DESCRIPTION "C++ wrapper for SQLite"
     LANGUAGES C CXX
 )
@@ -296,7 +296,7 @@ endif()
 #
 # cmake --install puts the headers, the libraries and a CMake package into the install prefix, for
 #
-#     find_package(sqlitexx 0.2 REQUIRED)
+#     find_package(sqlitexx 0.3 REQUIRED)
 #     target_link_libraries(my_app PRIVATE sqlitexx::sqlitexx)
 #
 # The bundled SQLite (sqlitexx::sqlite3) and the bundled backports (expected-lite, string-view-lite, optional-lite) are
