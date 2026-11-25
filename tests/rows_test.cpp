@@ -1,9 +1,10 @@
-// Tests for statement::rows(): the rows of a query as a range.
+// Tests for statement::rows() and database::query(): the rows of a query as a range.
 
 #include "check.hpp"
 #include "sqlitexx/sqlitexx.hpp"
 
 #include <algorithm>
+#include <cstddef>
 #include <string>
 #include <tuple>
 #include <utility>
@@ -208,7 +209,201 @@ void test_iterator_operations()
     CHECK(it == rows_range<int>::iterator());
 }
 
+void test_query_iterates()
+{
+    database db = open_users();
+
+    // One line: the results live as long as the loop
+    std::vector<std::string> names;
+    for (expected<std::tuple<std::string, optional<int>>>& user :
+         db.query<std::string, optional<int>>("SELECT name, age FROM user WHERE id >= ? ORDER BY id", 2))
+    {
+        CHECK(user.has_value());
+        if (user)
+        {
+            names.push_back(std::get<0>(*user));
+        }
+    }
+    CHECK((names == std::vector<std::string>{"Bob", "Carol"}));
+
+    // Views are fine inside the loop: the statement is alive
+    int count = 0;
+    for (expected<sqlitexx::string_view>& name : db.query<sqlitexx::string_view>("SELECT name FROM user"))
+    {
+        CHECK(name && !name->empty());
+        ++count;
+    }
+    CHECK(count == 3);
+
+    // No rows: the loop body never runs
+    int none = 0;
+    for (expected<int>& age : db.query<int>("SELECT age FROM user WHERE 0"))
+    {
+        static_cast<void>(age);
+        ++none;
+    }
+    CHECK(none == 0);
+}
+
+void test_query_runs_again()
+{
+    database db = open_users();
+    sqlitexx::results<std::string> names = db.query<std::string>("SELECT name FROM user WHERE age > ? ORDER BY id", 20);
+
+    std::vector<std::string> first_loop;
+    for (expected<std::string>& name : names)
+    {
+        CHECK(name.has_value());
+        if (name)
+        {
+            first_loop.push_back(*name);
+        }
+        break; // leaving early doesn't matter: the next loop starts over
+    }
+    CHECK((first_loop == std::vector<std::string>{"Alice"}));
+
+    CHECK(db.execute("INSERT INTO user(name, age) VALUES(?, ?)", "Dee", 41).has_value());
+    expected<std::vector<std::string>> all = names.all();
+    CHECK(all && (*all == std::vector<std::string>{"Alice", "Carol", "Dee"}));
+    expected<std::vector<std::string>> again = names.all();
+    CHECK(again && again->size() == 3);
+}
+
+void test_query_error_is_the_only_element()
+{
+    database db = open_users();
+
+    int elements = 0;
+    for (expected<int>& row : db.query<int>("SELECT nope FROM user"))
+    {
+        CHECK(!row && row.error().primary() == primary_code::error);
+        ++elements;
+    }
+    CHECK(elements == 1);
+
+    // Each loop gives the error again
+    sqlitexx::results<int> broken = db.query<int>("SELECT ?", 1, 2);
+    for (int loop = 0; loop < 2; ++loop)
+    {
+        int seen = 0;
+        for (expected<int>& row : broken)
+        {
+            CHECK(!row && row.error().primary() == primary_code::range);
+            ++seen;
+        }
+        CHECK(seen == 1);
+    }
+    expected<std::vector<int>> all = broken.all();
+    CHECK(!all && all.error().primary() == primary_code::range);
+}
+
+void test_query_all()
+{
+    database db = open_users();
+
+    expected<std::vector<std::tuple<std::string, optional<int>>>> users =
+        db.query<std::string, optional<int>>("SELECT name, age FROM user ORDER BY id").all();
+    CHECK(users && users->size() == 3);
+    CHECK(users && std::get<0>((*users)[1]) == "Bob" && !std::get<1>((*users)[1]));
+
+    // A row that can't be read stops it: Bob's age is NULL
+    expected<std::vector<int>> ages = db.query<int>("SELECT age FROM user ORDER BY id").all();
+    CHECK(!ages && ages.error().primary() == primary_code::mismatch);
+
+    expected<std::vector<int>> none = db.query<int>("SELECT age FROM user WHERE 0").all();
+    CHECK(none && none->empty());
+}
+
+void test_query_next()
+{
+    database db = open_users();
+    sqlitexx::results<std::string> names = db.query<std::string>("SELECT name FROM user WHERE id >= ? ORDER BY id", 1);
+
+    // Pages of two: Alice and Bob, then Carol, then nothing, and nothing again
+    expected<std::vector<std::string>> page = names.next(2);
+    CHECK(page && (*page == std::vector<std::string>{"Alice", "Bob"}));
+    page = names.next(2);
+    CHECK(page && (*page == std::vector<std::string>{"Carol"}));
+    page = names.next(2);
+    CHECK(page && page->empty());
+    page = names.next(2);
+    CHECK(page && page->empty());
+
+    // Another run (a loop, first() or all()) starts the pages over
+    expected<std::string> first = names.first();
+    CHECK(first && *first == "Alice");
+    page = names.next(1);
+    CHECK(page && (*page == std::vector<std::string>{"Alice"}));
+    for (expected<std::string>& name : names)
+    {
+        static_cast<void>(name);
+        break;
+    }
+    page = names.next(5);
+    CHECK(page && page->size() == 3);
+
+    // Zero rows asked: nothing read, nothing moved
+    page = names.next(0);
+    CHECK(page && page->empty());
+}
+
+void test_query_next_errors()
+{
+    database db = open_users();
+
+    // A row that can't be read fails its page; the next page goes on after it. Bob's age is NULL.
+    sqlitexx::results<int> ages = db.query<int>("SELECT age FROM user ORDER BY id");
+    expected<std::vector<int>> page = ages.next(2);
+    CHECK(!page && page.error().primary() == primary_code::mismatch);
+    page = ages.next(2);
+    CHECK(page && (*page == std::vector<int>{25}));
+
+    // A query that couldn't start gives its error every time
+    sqlitexx::results<int> broken = db.query<int>("SELECT nope FROM user");
+    expected<std::vector<int>> failed = broken.next(1);
+    CHECK(!failed && failed.error().primary() == primary_code::error);
+    failed = broken.next(1);
+    CHECK(!failed && failed.error().primary() == primary_code::error);
+}
+
+void test_query_skip()
+{
+    database db = open_users();
+    CHECK(db.execute("INSERT INTO user(name, age) VALUES('Dee', 41), ('Eve', 29)").has_value());
+
+    // Rows 2 to 4: skip one, read three; skip says how many it passed
+    sqlitexx::results<std::string> names = db.query<std::string>("SELECT name FROM user ORDER BY id");
+    expected<std::size_t> skipped = names.skip(1);
+    CHECK(skipped && *skipped == 1);
+    expected<std::vector<std::string>> page = names.next(3);
+    CHECK(page && (*page == std::vector<std::string>{"Bob", "Carol", "Dee"}));
+
+    // Past the end it passes fewer, then none
+    skipped = names.skip(5);
+    CHECK(skipped && *skipped == 1);
+    skipped = names.skip(5);
+    CHECK(skipped && *skipped == 0);
+
+    // The same rows with LIMIT and OFFSET
+    expected<std::vector<std::string>> same =
+        db.query<std::string>("SELECT name FROM user ORDER BY id LIMIT ? OFFSET ?", 3, 1).all();
+    CHECK(same && (*same == std::vector<std::string>{"Bob", "Carol", "Dee"}));
+
+    // Skipping reads no columns, so a row that couldn't be read doesn't stop it: Bob's age is NULL
+    sqlitexx::results<int> ages = db.query<int>("SELECT age FROM user ORDER BY id");
+    skipped = ages.skip(2);
+    CHECK(skipped && *skipped == 2);
+    expected<std::vector<int>> rest = ages.next(10);
+    CHECK(rest && (*rest == std::vector<int>{25, 41, 29}));
+
+    // A query that couldn't start gives its error
+    sqlitexx::results<int> broken = db.query<int>("SELECT nope FROM user");
+    expected<std::size_t> failed = broken.skip(1);
+    CHECK(!failed && failed.error().primary() == primary_code::error);
+}
+
 #if defined(__cpp_lib_ranges)
+static_assert(std::ranges::input_range<sqlitexx::results<int>>);
 static_assert(std::input_iterator<rows_range<int>::iterator>);
 static_assert(std::ranges::input_range<rows_range<int>>);
 static_assert(std::ranges::input_range<rows_range<
@@ -264,6 +459,13 @@ int main()
     test_step_error_ends_the_range();
     test_continues_where_the_statement_is();
     test_iterator_operations();
+    test_query_iterates();
+    test_query_runs_again();
+    test_query_error_is_the_only_element();
+    test_query_all();
+    test_query_next();
+    test_query_next_errors();
+    test_query_skip();
 #if defined(__cpp_lib_ranges)
     test_cxx20_views();
 #endif

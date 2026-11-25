@@ -8,15 +8,15 @@
 
 namespace sqlitexx
 {
-// A read-only view of text that is followed by a '\0': data()[size()] is always '\0', so c_str() can go straight to C
-// functions. It never holds a null pointer; a default-constructed one views "".
-//
-// Only sources that guarantee the terminator create one (C strings such as string literals, std::string, SQLite's
-// column text), and only remove_prefix() changes one, since it keeps the end of the text. Anything that cuts off the
-// end is a string_view: view() gives one, and a cstring_view converts to it implicitly.
-//
-// Text may contain '\0' characters of its own. size() counts them, but a C function reading c_str() stops at the
-// first one, so it sees less of the text, never more: use data() and size() for text that may hold them.
+/// A read-only view of text that is followed by a '\0': data()[size()] is always '\0', so c_str() can go straight to C
+/// functions. It never holds a null pointer; a default-constructed one views "".
+///
+/// Only sources that guarantee the terminator create one (C strings such as string literals, std::string, SQLite's
+/// column text), and only remove_prefix() changes one, since it keeps the end of the text. Anything that cuts off the
+/// end is a string_view: view() gives one, and a cstring_view converts to it implicitly.
+///
+/// Text may contain '\0' characters of its own. size() counts them, but a C function reading c_str() stops at the
+/// first one, so it sees less of the text, never more: use data() and size() for text that may hold them.
 template <class CharT>
 class basic_cstring_view
 {
@@ -37,7 +37,7 @@ public:
     {
     }
 
-    // A null pointer views "", like a default-constructed view.
+    /// A null pointer views "", like a default-constructed view.
     basic_cstring_view(const CharT* source) noexcept
         : text(source == nullptr ? empty_text() : source),
           count(source == nullptr ? 0 : traits_type::length(source))
@@ -56,7 +56,7 @@ public:
     {
     }
 
-    // For callers who know that terminated[size] is '\0', with no check: text from a C API that guarantees it.
+    /// For callers who know that terminated[size] is '\0', with no check: text from a C API that guarantees it.
     static basic_cstring_view assume_terminated(
         const CharT* terminated,
         size_type size
@@ -102,13 +102,13 @@ public:
         return text + count;
     }
 
-    // index <= size(); index == size() reads the terminator.
+    /// index <= size(); index == size() reads the terminator.
     const CharT& operator[](size_type index) const noexcept
     {
         return text[index];
     }
 
-    // Changing: drops the first n characters (n <= size()), which keeps the terminator.
+    /// Changing: drops the first n characters (n <= size()), which keeps the terminator.
     void remove_prefix(size_type n) noexcept
     {
         text += n;
@@ -205,7 +205,7 @@ using cstring_view = basic_cstring_view<char>;
 using u16cstring_view = basic_cstring_view<char16_t>;
 
 #if defined(__cpp_char8_t) && defined(__cpp_lib_char8_t)
-// UTF-8 text as char8_t (C++20)
+/// UTF-8 text as char8_t (C++20)
 using u8cstring_view = basic_cstring_view<char8_t>;
 #endif
 } // sqlitexx

@@ -1,13 +1,14 @@
 #ifndef SQLITEXX_DETAIL_OUT_OF_MEMORY_HPP
 #define SQLITEXX_DETAIL_OUT_OF_MEMORY_HPP
 
-// Running out of memory as an error rather than std::bad_alloc.
-//
-// With exceptions enabled, sqlitexx catches std::bad_alloc where it allocates and gives an error with
-// primary_code::nomem instead. That error's message, "out of memory", is short enough for the standard libraries to
-// keep inside the std::string (13 characters; libstdc++, libc++ and MSVC keep up to 15), so making it allocates
-// nothing. Without exceptions, a failed allocation ends the program as it does in the standard library. So does MSVC's
-// iterator debugging (Debug builds): it gives every std::string a proxy object on the heap, even an empty one.
+/// \file
+/// Running out of memory as an error rather than std::bad_alloc.
+///
+/// With exceptions enabled, sqlitexx catches std::bad_alloc where it allocates and gives an error with
+/// primary_code::nomem instead. That error's message, "out of memory", is short enough for the standard libraries to
+/// keep inside the std::string (13 characters; libstdc++, libc++ and MSVC keep up to 15), so making it allocates
+/// nothing. Without exceptions, a failed allocation ends the program as it does in the standard library. So does MSVC's
+/// iterator debugging (Debug builds): it gives every std::string a proxy object on the heap, even an empty one.
 
 #include "sqlitexx/error.hpp"
 #include "sqlitexx/expected.hpp"
@@ -36,7 +37,7 @@ namespace detail
         return error(nomem_result(), "out of memory");
     }
 
-    // An error with a fixed message; out_of_memory() when copying the message runs out
+    /// An error with a fixed message; out_of_memory() when copying the message runs out
     inline error error_with(
         native::result code,
         const char* message
@@ -56,7 +57,7 @@ namespace detail
 #endif
     }
 
-    // An error with the message that build() puts together; out_of_memory() when putting it together runs out
+    /// An error with the message that build() puts together; out_of_memory() when putting it together runs out
     template <class Build>
     error built_error(
         native::result code,
@@ -77,8 +78,8 @@ namespace detail
 #endif
     }
 
-    // Runs `body`, which returns an expected; std::bad_alloc from it becomes out_of_memory(). Other exceptions, from
-    // the user's own code, pass through.
+    /// Runs `body`, which returns an expected; std::bad_alloc from it becomes out_of_memory(). Other exceptions, from
+    /// the user's own code, pass through.
     template <class Body>
     auto allocation_guard(Body&& body) -> decltype(std::forward<Body>(body)())
     {

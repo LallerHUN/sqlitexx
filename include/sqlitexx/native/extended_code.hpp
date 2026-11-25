@@ -5,9 +5,9 @@ namespace sqlitexx
 {
 namespace native
 {
-    // The extended result codes: a primary code in the low 8 bits and the detail above them. Values match
-    // SQLITE_<PRIMARY>_<DETAIL> in sqlite3.h, so constraint_unique is SQLITE_CONSTRAINT_UNIQUE. A code a newer SQLite
-    // adds is not listed here; compare result::code() with its number instead.
+    /// The extended result codes: a primary code in the low 8 bits and the detail above them. Values match
+    /// SQLITE_<PRIMARY>_<DETAIL> in sqlite3.h, so constraint_unique is SQLITE_CONSTRAINT_UNIQUE. A code a newer SQLite
+    /// adds is not listed here; compare result::code() with its number instead.
     enum class extended_code : int
     {
         // error

@@ -5,7 +5,7 @@ namespace sqlitexx
 {
 namespace native
 {
-    // Flags for connection::open. Values match SQLITE_OPEN_* in sqlite3.h.
+    /// Flags for connection::open. Values match SQLITE_OPEN_* in sqlite3.h.
     enum class open_flags : int
     {
         none = 0,
@@ -24,7 +24,7 @@ namespace native
         default_rw = readwrite | create,
     };
 
-    // Flags for connection::prepare. Values match SQLITE_PREPARE_* in sqlite3.h.
+    /// Flags for connection::prepare. Values match SQLITE_PREPARE_* in sqlite3.h.
     enum class prepare_flags : unsigned int
     {
         none = 0,
@@ -33,8 +33,8 @@ namespace native
         no_vtab = 0x04,
     };
 
-    // How an SQL function behaves (connection::create_function). Values match SQLITE_DETERMINISTIC,
-    // SQLITE_DIRECTONLY and SQLITE_INNOCUOUS in sqlite3.h; the text encoding is always UTF-8.
+    /// How an SQL function behaves (connection::create_function). Values match SQLITE_DETERMINISTIC,
+    /// SQLITE_DIRECTONLY and SQLITE_INNOCUOUS in sqlite3.h; the text encoding is always UTF-8.
     enum class function_flags : int
     {
         none = 0,
@@ -46,7 +46,7 @@ namespace native
         innocuous = 0x00200000,
     };
 
-    // How a bound text or blob is held by SQLite.
+    /// How a bound text or blob is held by SQLite.
     enum class bind_mode
     {
         // SQLite copies the data before the bind call returns (SQLITE_TRANSIENT).
@@ -56,7 +56,7 @@ namespace native
         no_copy,
     };
 
-    // The fundamental datatype of a column value. Values match SQLITE_INTEGER ... SQLITE_NULL in sqlite3.h.
+    /// The fundamental datatype of a column value. Values match SQLITE_INTEGER ... SQLITE_NULL in sqlite3.h.
     enum class value_type : int
     {
         integer = 1,

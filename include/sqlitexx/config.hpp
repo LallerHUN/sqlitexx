@@ -1,12 +1,13 @@
 #ifndef SQLITEXX_CONFIG_HPP
 #define SQLITEXX_CONFIG_HPP
 
-// Build configuration and vocabulary types.
-//
-// Every public header gets its vocabulary types (string_view, optional) from here, never from std:: directly, and
-// expected from sqlitexx/expected.hpp. They are the std:: types from C++17, or the string-view-lite and optional-lite
-// backports, as CMake chose when sqlitexx was configured (see SQLITEXX_CXX17_TYPES in CMakeLists.txt). The choice is
-// made once per build: one choice per translation unit would break the ODR.
+/// \file
+/// Build configuration and vocabulary types.
+///
+/// Every public header gets its vocabulary types (string_view, optional) from here, never from std:: directly, and
+/// expected from sqlitexx/expected.hpp. They are the std:: types from C++17, or the string-view-lite and optional-lite
+/// backports, as CMake chose when sqlitexx was configured (see SQLITEXX_CXX17_TYPES in CMakeLists.txt). The choice is
+/// made once per build: one choice per translation unit would break the ODR.
 
 #if defined(_MSVC_LANG)
 #define SQLITEXX_CPLUSPLUS _MSVC_LANG
@@ -18,9 +19,12 @@
 #error "sqlitexx needs C++11 or newer"
 #endif
 
-// [[nodiscard]] from C++17, where every compiler takes it without a warning
+// For results that must not be ignored, errors above all: [[nodiscard]] from C++17. Before it, Clang's own attribute,
+// which a cast to void silences like [[nodiscard]]; GCC's warn_unused_result isn't used, as no cast silences it.
 #if SQLITEXX_CPLUSPLUS >= 201703L
 #define SQLITEXX_DETAIL_NODISCARD [[nodiscard]]
+#elif defined(__clang__)
+#define SQLITEXX_DETAIL_NODISCARD [[clang::warn_unused_result]]
 #else
 #define SQLITEXX_DETAIL_NODISCARD
 #endif

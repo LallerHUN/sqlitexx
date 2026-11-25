@@ -1,7 +1,8 @@
 #ifndef SQLITEXX_SQLITEXX_HPP
 #define SQLITEXX_SQLITEXX_HPP
 
-// Everything sqlitexx offers. Include this, or the individual headers.
+/// \file
+/// Everything sqlitexx offers. Include this, or the individual headers.
 
 #include "sqlitexx/aggregate.hpp"
 #include "sqlitexx/backup.hpp"
@@ -27,6 +28,7 @@
 #include "sqlitexx/native/statement.hpp"
 #include "sqlitexx/native/value.hpp"
 #include "sqlitexx/registrations.hpp"
+#include "sqlitexx/results.hpp"
 #include "sqlitexx/rows.hpp"
 #include "sqlitexx/statement.hpp"
 #include "sqlitexx/transaction.hpp"

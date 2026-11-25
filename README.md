@@ -10,91 +10,131 @@ A C++ wrapper for [SQLite](https://sqlite.org) in two layers:
 
 > **Status:** early development. The API may still change between commits.
 
-## Example
+The [API reference](https://lallerhun.github.io/sqlitexx/) documents every class and header of the latest release.
+
+## First steps
+
+Add sqlitexx to your CMake project (see [Using sqlitexx in your project](#using-sqlitexx-in-your-project)), then
+include everything at once:
 
 ```cpp
 #include <sqlitexx/sqlitexx.hpp>
 
-#include <cstdio>
-#include <string>
-
 namespace sql = sqlitexx;
+```
 
-int main()
+### 1. Open a database
+
+```cpp
+sql::expected<sql::database> opened = sql::database::open(":memory:");
+if (!opened)
 {
-    // Open: every call that can fail returns expected<T, error>
-    sql::expected<sql::database> opened = sql::database::open(":memory:");
-    if (!opened)
-    {
-        std::printf("cannot open: %s\n", opened.error().message().c_str());
-        return 1;
-    }
-    sql::database& db = *opened;
+    std::printf("cannot open: %s\n", opened.error().message().c_str());
+    return 1;
+}
+sql::database& db = *opened;
+```
 
-    sql::expected<void> created =
-        db.execute("CREATE TABLE user(id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, age INTEGER)");
-    if (!created)
-    {
-        std::printf("cannot create: %s\n", created.error().message().c_str());
-        return 1;
-    }
+Every call that can fail returns an `expected<T, error>`: the value, or the error that stopped it. sqlitexx never
+throws. `":memory:"` is a database that lives only as long as `db`; give a file name to keep it on disk.
 
-    // Prepare once, run with different values. optional<T> binds and reads NULL.
-    sql::expected<sql::statement> insert = db.prepare("INSERT INTO user(name, age) VALUES(?, ?)");
-    if (!insert || !insert->execute("Alice", 31) || !insert->execute("Bob", sql::optional<int>()))
-    {
-        std::printf("cannot insert\n");
-        return 1;
-    }
+### 2. Write
 
-    // Errors carry SQLite's code and message
-    sql::expected<void> duplicate = insert->execute("Alice", 32);
-    if (!duplicate)
-    {
-        std::printf("expected failure: %s\n", duplicate.error().message().c_str());
-    }
+```cpp
+sql::expected<void> written =
+    db.execute("CREATE TABLE user(id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, age INTEGER)")
+        .and_then(
+            [&db]
+            {
+                return db.execute("INSERT INTO user(name, age) VALUES(?, ?)", "Alice", 31);
+            }
+        );
 
-    // Read every row: one column gives the value, several a std::tuple or a callback with one argument per column
-    sql::expected<void> listed =
-        db.prepare("SELECT name, age FROM user ORDER BY id")
-            .and_then(
-                sql::for_each_row<std::string, sql::optional<int>>(
-                    [](const std::string& name, sql::optional<int> age)
-                    {
-                        std::printf("%s: %s\n", name.c_str(), age ? std::to_string(*age).c_str() : "unknown");
-                    }
-                )
-            );
-
-    // Chain the steps, and turn one kind of error into a value: no such user gives -1
-    sql::expected<int> carol = db.prepare("SELECT age FROM user WHERE name = ?")
-                                   .and_then(sql::bind_values("Carol"))
-                                   .and_then(sql::first<int>())
-                                   .or_else(
-                                       sql::on(
-                                           sql::native::primary_code::done,
-                                           [](const sql::error&)
-                                           {
-                                               return sql::expected<int>(-1);
-                                           }
-                                       )
-                                   );
-
-    std::printf("Carol: %d\n", carol.value_or(-2));
-    return listed && carol && *carol == -1 ? 0 : 1;
+// SQL that runs many times: prepare it once. optional<T> binds and reads NULL.
+sql::expected<sql::statement> insert = db.prepare("INSERT INTO user(name, age) VALUES(?, ?)");
+if (!insert || !insert->execute("Bob", sql::optional<int>()))
+{
+    ...
 }
 ```
 
+`execute(sql)` runs SQL without values, even several statements at once. `execute(sql, args...)` binds the
+arguments to the `?` placeholders in order, so values never need to be pasted into the SQL text. `and_then` runs
+the next step only when the previous one succeeded.
+
+### 3. Read
+
+```cpp
+for (sql::expected<std::tuple<std::string, sql::optional<int>>>& user :
+     db.query<std::string, sql::optional<int>>("SELECT name, age FROM user ORDER BY id"))
+{
+    if (!user)
+    {
+        std::printf("cannot list: %s\n", user.error().message().c_str());
+        break;
+    }
+    const sql::optional<int>& age = std::get<1>(*user);
+    std::printf("%s: %s\n", std::get<0>(*user).c_str(), age ? std::to_string(*age).c_str() : "unknown");
+}
+
+sql::expected<std::int64_t> count = db.query<std::int64_t>("SELECT count(*) FROM user").first();
+```
+
+`query<T...>` takes one type per column: the value for one column, a `std::tuple` for several. Each row is an
+`expected` too, so an error in the middle of the rows can't slip through. `first()` reads just the first row, and
+`all()` reads every row into a `std::vector`. See [Queries](#queries) for more.
+
+### 4. Handle errors
+
+```cpp
+sql::expected<void> duplicate = db.execute("INSERT INTO user(name, age) VALUES(?, ?)", "Alice", 32);
+if (!duplicate)
+{
+    std::printf("expected failure: %s\n", duplicate.error().message().c_str());
+}
+
+// on() turns one kind of error into a value: no such user gives -1
+sql::expected<int> carol = db.query<int>("SELECT age FROM user WHERE name = ?", "Carol")
+                               .first()
+                               .or_else(
+                                   sql::on(
+                                       sql::native::primary_code::done,
+                                       [](const sql::error&)
+                                       {
+                                           return sql::expected<int>(-1);
+                                       }
+                                   )
+                               );
+```
+
+An `error` holds SQLite's result code and message. Ignoring a returned `expected` is a compiler warning, so an error
+can't be dropped by accident. `on(code, handler)` inside `or_else` handles one kind of error and passes the others
+on. See [Errors](#errors) for the codes.
+
+The whole program is [examples/quick_start.cpp](examples/quick_start.cpp); CI builds and runs it on every change.
 It prints:
 
 ```text
-expected failure: UNIQUE constraint failed: user.name
 Alice: 31
 Bob: unknown
+users: 2
+expected failure: UNIQUE constraint failed: user.name
 Carol: -1
 ```
 
-This program is [examples/quick_start.cpp](examples/quick_start.cpp); CI builds and runs it on every change.
+### Good to know
+
+- **Parameters count from 1, columns from 0.** That is SQLite's own numbering: the first `?` is parameter 1
+  (`bind_at(1, value)`), the first column of a row is column 0 (`column<T>(0)`). The calls that take all values at
+  once (`execute(sql, args...)`, `query<T...>`) handle the numbering for you.
+- **NULL goes only into `optional<T>`.** Reading NULL into an `int` or a `std::string` is an error, not a silent 0
+  or empty string. Integers that don't fit their type are errors too.
+- **One statement at a time.** `query`, `prepare` and `execute` with arguments reject SQL holding more than one
+  statement, rather than running the first and ignoring the rest. `execute(sql)` without arguments runs scripts.
+- **Views point into SQLite's memory.** A `string_view` read from a row is valid until the next step. Read a
+  `std::string` to keep the text; where a view would outlive its row, sqlitexx refuses to compile.
+- **Large tables:** to read page after page, prefer `WHERE id > ? ORDER BY id LIMIT 20` with the last id you saw
+  over `OFFSET`, which SQLite still has to step through.
 
 ## Requirements
 
@@ -114,7 +154,7 @@ cmake --install build --config Release --prefix <prefix>
 ```
 
 ```cmake
-find_package(sqlitexx 0.4 REQUIRED) # with <prefix> in CMAKE_PREFIX_PATH
+find_package(sqlitexx 0.5 REQUIRED) # with <prefix> in CMAKE_PREFIX_PATH
 target_link_libraries(my_app PRIVATE sqlitexx::sqlitexx)
 ```
 
@@ -193,14 +233,19 @@ Reading NULL into anything other than `optional<T>` is an error. Your own types 
 ### Errors
 
 `sqlitexx::error` holds SQLite's extended result code and its message. Errors sqlitexx finds itself use SQLite codes
-too, so one kind of check covers both:
+too, so one kind of check covers both.
+
+An ignored error is a compiler warning: every call that returns an `expected` is `[[nodiscard]]` from C++17 (and
+with Clang from C++11), so `db.execute("DELETE FROM t");` without looking at the result warns. Where ignoring it is
+meant, say so: `static_cast<void>(db.execute("DELETE FROM t"));`. The chaining helpers (`first<T>()`,
+`execute_with(...)`, ...) are marked too, as one that isn't passed to `and_then` does nothing.
 
 | Primary code | Meaning in sqlitexx |
 |---|---|
 | `done` | `first()` found no row |
 | `mismatch` | NULL read into a non-optional type, or an integer that doesn't fit |
 | `nomem` | Out of memory, in SQLite or in sqlitexx (see [Out of memory](#out-of-memory)) |
-| `misuse` | `prepare()` was given no SQL statement, or more than one |
+| `misuse` | `prepare()`, `query()` or `execute(sql, args...)` was given no SQL statement, or more than one |
 
 `sqlitexx::on(code, handler)` handles one kind of error inside `or_else` and passes every other error on unchanged.
 `code` is either of these:
@@ -214,8 +259,7 @@ The extended codes are named after `sqlite3.h` without the prefix (`SQLITE_CONST
 `on()` also takes the number as an `int`.
 
 ```cpp
-auto added = db.prepare("INSERT INTO user(name) VALUES(?)")
-                 .and_then(sql::execute_with("Alice"))
+auto added = db.execute("INSERT INTO user(name) VALUES(?)", "Alice")
                  .transform([] { return true; })
                  .or_else(sql::on(sql::native::extended_code::constraint_unique, [](const sql::error&) {
                      return sql::expected<bool>(false); // already there
@@ -253,6 +297,77 @@ Without exceptions, a failed allocation ends the program, as it does in the stan
 memory is a `nomem` error either way. With MSVC's iterator debugging (its Debug builds), the standard library gives
 every `std::string` a proxy object on the heap, even an empty one, and ends the program itself when that fails; the
 guarantee holds in release builds.
+
+### Queries
+
+`db.query<T...>(sql, args...)` runs a query with its arguments bound to parameters 1, 2, 3, ... and gives its rows,
+one type per column. Iterate it, or take the first row or all of them:
+
+```cpp
+for (sql::expected<std::tuple<std::string, int>>& user :
+     db.query<std::string, int>("SELECT name, age FROM user WHERE age >= ?", 18))
+{
+    if (!user)
+    {
+        std::printf("%s\n", user.error().message().c_str());
+        break;
+    }
+    std::printf("%s is %d\n", std::get<0>(*user).c_str(), std::get<1>(*user));
+}
+
+sql::expected<std::int64_t> count = db.query<std::int64_t>("SELECT count(*) FROM user").first();
+sql::expected<std::vector<std::string>> names = db.query<std::string>("SELECT name FROM user").all();
+
+// Pages: next(count) reads on from where the previous page stopped; an empty page means the end
+sql::results<std::string> users = db.query<std::string>("SELECT name FROM user ORDER BY name");
+sql::expected<std::vector<std::string>> page = users.next(20);
+```
+
+Rows 3 to 8 can come from SQL or from C++:
+
+```cpp
+// LIMIT and OFFSET: SQLite skips the first rows without reading their columns
+sql::expected<std::vector<std::string>> some =
+    db.query<std::string>("SELECT name FROM user ORDER BY name LIMIT ? OFFSET ?", 6, 2).all();
+
+// skip(count) passes over rows, then next(count) reads on; skip gives how many it passed
+sql::results<std::string> names = db.query<std::string>("SELECT name FROM user ORDER BY name");
+sql::expected<std::size_t> skipped = names.skip(2);
+sql::expected<std::vector<std::string>> rows_3_to_8 = names.next(6);
+
+// C++20: results is a range, so the standard views work on it too
+for (sql::expected<std::string>& name : names | std::views::drop(2) | std::views::take(6)) { ... }
+```
+
+- The rows are a `results<T...>`, which owns its statement, so the loop above is safe in every C++ standard.
+- Each element is an `expected`. When preparing or binding fails, the error is the only element; when a row can't
+  be read (NULL into a non-optional type), only that row is an error; when stepping fails, that error is the last
+  element. `first()` and `all()` give the first error they meet.
+- `first()` gives a `done` error when there is no row, so `on(native::primary_code::done, ...)` turns that into a
+  value. `all()` reads every row into a `std::vector`.
+- Every loop, `first()` and `all()` runs the query again from the start and sees the data as it is then. `next()`
+  and `skip()` go on from where the previous one stopped, and start over after any of the others. Rows are read one step
+  at a time: nothing is cached or read ahead.
+- A row that can't be read fails its page in `next()`, and the next page goes on after it.
+- Inside a loop, `string_view` and the other views point into the current row. `first()` on a temporary, as in
+  `db.query<sql::string_view>(sql).first()`, doesn't compile with them, since the statement ends before you could
+  use the view: read a `std::string` or a blob, or keep the `results` in a variable. `all()` and `next()` never take
+  views, because each step ends the views of the row before. Your own
+  `value_traits` say they read a view with `static constexpr bool reads_view = true;`. The `first<T>()` chaining
+  step on a statement fresh from `prepare()` checks the same.
+
+For SQL whose rows you don't need, and for SQL you run many times:
+
+```cpp
+sql::expected<void> added = db.execute("INSERT INTO user(name, age) VALUES(?, ?)", "Dee", 41);
+
+sql::expected<sql::statement> insert = db.prepare("INSERT INTO user(name, age) VALUES(?, ?)", "Eve", 29);
+```
+
+- `execute(sql)` without arguments runs a script of several statements. With arguments, `execute`, `query` and
+  `prepare` take one statement, and SQL holding more is a `misuse` error, as with `prepare(sql)`.
+- `query` and `execute` prepare the SQL on every call. For SQL you run many times, prepare it once (with or without
+  arguments) and call `statement::execute(args...)`, `first()` or `rows()` on it.
 
 ### Chaining helpers
 
@@ -458,8 +573,9 @@ db.progress_handler(1000, [&] { return !cancelled; }, scope);    // every 1000 V
 
 ### Rows as a range
 
-`statement::rows<T...>()` gives the rows of a query for a range-based `for` loop. Each element is an
-`expected<row<T...>>`: the value for one column, a `std::tuple` for several, or the error.
+`statement::rows<T...>()` gives the rows of a prepared statement for a range-based `for` loop, like
+[`query()`](#queries) does for SQL. Each element is an `expected<row<T...>>`: the value for one column, a
+`std::tuple` for several, or the error.
 
 ```cpp
 for (sql::expected<std::tuple<std::string, int>>& user : select.rows<std::string, int>())

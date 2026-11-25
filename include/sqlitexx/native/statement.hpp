@@ -18,16 +18,16 @@ namespace sqlitexx
 {
 namespace native
 {
-    // A prepared statement (sqlite3_stmt). Move-only; the destructor finalizes it.
-    //
-    // Mirrors the C API one to one: functions return result codes and never throw. Bind and column indexes follow
-    // SQLite: parameters count from 1, columns from 0.
+    /// A prepared statement (sqlite3_stmt). Move-only; the destructor finalizes it.
+    ///
+    /// Mirrors the C API one to one: functions return result codes and never throw. Bind and column indexes follow
+    /// SQLite: parameters count from 1, columns from 0.
     class statement final
     {
     public:
         statement() noexcept = default;
 
-        // Takes ownership of a handle prepared elsewhere.
+        /// Takes ownership of a handle prepared elsewhere.
         explicit statement(sqlite3_stmt* handle) noexcept;
 
         statement(statement&& other) noexcept;
@@ -38,21 +38,25 @@ namespace native
 
         ~statement();
 
-        // Lifetime
+        /// \name Lifetime
+        ///@{
         result finalize() noexcept;
         sqlite3_stmt* handle() const noexcept;
         sqlite3_stmt* release() noexcept;
         explicit operator bool() const noexcept;
+        ///@}
 
-        // Execution
+        /// \name Execution
+        ///@{
         result step() noexcept;
         result reset() noexcept;
         result clear_bindings() noexcept;
         bool readonly() const noexcept;
         bool busy() const noexcept;
         const char* sql() const noexcept;
+        ///@}
 
-        // Binding (index counts from 1)
+        /// Binding (index counts from 1)
         result bind_null(int index) noexcept;
         result bind_int(
             int index,
@@ -88,11 +92,11 @@ namespace native
         ) noexcept;
         int bind_parameter_count() const noexcept;
 
-        // 0 when there is no parameter with this name. The name includes its prefix: ":id", "@id" or "$id".
+        /// 0 when there is no parameter with this name. The name includes its prefix: ":id", "@id" or "$id".
         int bind_parameter_index(const char* name) const noexcept;
         const char* bind_parameter_name(int index) const noexcept;
 
-        // Columns (index counts from 0)
+        /// Columns (index counts from 0)
         int column_count() const noexcept;
         int data_count() const noexcept;
         const char* column_name(int index) const noexcept;
@@ -102,15 +106,15 @@ namespace native
         std::int64_t column_int64(int index) const noexcept;
         double column_double(int index) const noexcept;
 
-        // The text of a column, always followed by a '\0' (see cstring_view). nullopt when SQLite has no text to give,
-        // as sqlite3_column_text returns NULL: for a NULL value, or when converting the value to text ran out of
-        // memory (column_type() or connection::extended_errcode() tells which). An empty string is an empty view,
-        // never nullopt. The view stays valid until the next step(), reset() or finalize(), or until the same column
-        // is read in another encoding.
+        /// The text of a column, always followed by a '\0' (see cstring_view). nullopt when SQLite has no text to give,
+        /// as sqlite3_column_text returns NULL: for a NULL value, or when converting the value to text ran out of
+        /// memory (column_type() or connection::extended_errcode() tells which). An empty string is an empty view,
+        /// never nullopt. The view stays valid until the next step(), reset() or finalize(), or until the same column
+        /// is read in another encoding.
         optional<cstring_view> column_text(int index) const noexcept;
         optional<u16cstring_view> column_text16(int index) const noexcept;
 
-        // As in C: NULL for a NULL value and for a zero-length blob alike, so check column_type() or column_bytes().
+        /// As in C: NULL for a NULL value and for a zero-length blob alike, so check column_type() or column_bytes().
         const void* column_blob(int index) const noexcept;
         std::size_t column_bytes(int index) const noexcept;
 

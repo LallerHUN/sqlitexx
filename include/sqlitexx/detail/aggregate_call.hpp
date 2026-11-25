@@ -1,9 +1,10 @@
 #ifndef SQLITEXX_DETAIL_AGGREGATE_CALL_HPP
 #define SQLITEXX_DETAIL_AGGREGATE_CALL_HPP
 
-// What SQLite calls for an aggregate made from a C++ class: one copy of the prototype per group, created on the
-// group's first row, fed with step() (and for window functions taken back with inverse()), asked for its result with
-// finish() (or value() while a window moves) and destroyed after the final call.
+/// \file
+/// What SQLite calls for an aggregate made from a C++ class: one copy of the prototype per group, created on the
+/// group's first row, fed with step() (and for window functions taken back with inverse()), asked for its result with
+/// finish() (or value() while a window moves) and destroyed after the final call.
 
 #include "sqlitexx/config.hpp"
 #include "sqlitexx/detail/registration_block.hpp"
@@ -20,7 +21,7 @@ namespace sqlitexx
 {
 namespace detail
 {
-    // An aggregate class: step(...) and finish()
+    /// An aggregate class: step(...) and finish()
     template <class T, class = void>
     struct is_aggregate_class : std::false_type
     {
@@ -31,7 +32,7 @@ namespace detail
     {
     };
 
-    // A window function class: also inverse(...) and value()
+    /// A window function class: also inverse(...) and value()
     template <class T, class = void>
     struct is_window_class : std::false_type
     {
@@ -42,7 +43,7 @@ namespace detail
     {
     };
 
-    // Storage: how user_data holds the prototype (owned_by_sqlite, or shared_with_token through a registrations token)
+    /// Storage: how user_data holds the prototype (owned_by_sqlite, or shared_with_token through a registrations token)
     template <class T, class Storage = owned_by_sqlite<T>>
     class aggregate_caller
     {
@@ -146,7 +147,7 @@ namespace detail
         }
 
     private:
-        // What SQLite keeps per group, in its zero-filled aggregate memory
+        /// What SQLite keeps per group, in its zero-filled aggregate memory
         struct state
         {
             T* object;
@@ -157,7 +158,7 @@ namespace detail
         {
         };
 
-        // A member function bound to its object, called like a function
+        /// A member function bound to its object, called like a function
         template <class Member>
         struct bound_member
         {
@@ -200,14 +201,14 @@ namespace detail
             state* group;
         };
 
-        // The group's state without allocating it: null when no row has reached the group
+        /// The group's state without allocating it: null when no row has reached the group
         static state* state_of(native::context& ctx) noexcept
         {
             return static_cast<state*>(ctx.aggregate_context(0));
         }
 
-        // The group's object, created from the prototype on the group's first row. Null when the call has failed
-        // (out of memory, or the registrations token ended the prototype) or an earlier row of the group failed.
+        /// The group's object, created from the prototype on the group's first row. Null when the call has failed
+        /// (out of memory, or the registrations token ended the prototype) or an earlier row of the group failed.
         static T* current(
             native::context& ctx,
             bool create
@@ -286,8 +287,8 @@ namespace detail
             );
         }
 
-        // The result: from the group's object, or for a group no row reached (an empty table) from a fresh copy of
-        // the prototype, as SQL gives a result for zero rows too. Nothing after a failed row: that error stands.
+        /// The result: from the group's object, or for a group no row reached (an empty table) from a fresh copy of
+        /// the prototype, as SQL gives a result for zero rows too. Nothing after a failed row: that error stands.
         template <class Ask>
         static void answer(
             native::context& ctx,

@@ -1,9 +1,10 @@
 #ifndef SQLITEXX_DETAIL_SQL_CALL_HPP
 #define SQLITEXX_DETAIL_SQL_CALL_HPP
 
-// What every C++ callback SQLite runs needs, for SQL functions and aggregates alike: reading the arguments with
-// value_traits, turning what the C++ code returns into the result or the error of the call, and keeping exceptions
-// from reaching SQLite.
+/// \file
+/// What every C++ callback SQLite runs needs, for SQL functions and aggregates alike: reading the arguments with
+/// value_traits, turning what the C++ code returns into the result or the error of the call, and keeping exceptions
+/// from reaching SQLite.
 
 #include "sqlitexx/config.hpp"
 #include "sqlitexx/detail/function_values.hpp"
@@ -29,8 +30,8 @@ namespace sqlitexx
 {
 namespace detail
 {
-    // The parameters of a callable with one signature: a function pointer, a member function pointer, or a class with a
-    // single, non-template operator() (a lambda without auto parameters)
+    /// The parameters of a callable with one signature: a function pointer, a member function pointer, or a class with
+    /// a single, non-template operator() (a lambda without auto parameters)
     template <class F>
     struct callable_signature : callable_signature<decltype(&F::operator())>
     {
@@ -79,7 +80,7 @@ namespace detail
     {
     };
 
-    // The call failed: the statement running it fails with this error's code and message
+    /// The call failed: the statement running it fails with this error's code and message
     inline void fail(
         native::context& ctx,
         const error& e
@@ -92,14 +93,14 @@ namespace detail
         );
     }
 
-    // The error of a call after its registrations token ended the callable (see sqlitexx/registrations.hpp)
+    /// The error of a call after its registrations token ended the callable (see sqlitexx/registrations.hpp)
     inline void registration_ended(native::context& ctx) noexcept
     {
         ctx.result_error("the registrations token of this function ended before the function was removed");
         ctx.result_error_code(native::result(static_cast<int>(native::primary_code::misuse)));
     }
 
-    // Runs `body` and turns an exception into the error of the call
+    /// Runs `body` and turns an exception into the error of the call
     template <class Body>
     void guarded(
         native::context& ctx,
@@ -129,12 +130,12 @@ namespace detail
 #endif
     }
 
-    // Arguments: read into a tuple of the parameter types; NULL only into optional<T>
+    /// Arguments: read into a tuple of the parameter types; NULL only into optional<T>
     template <class Arguments>
     class argument_reader
     {
     public:
-        // False when an argument doesn't fit; the call has failed then
+        /// False when an argument doesn't fit; the call has failed then
         static bool read(
             native::context& ctx,
             sqlite3_value** values,
@@ -217,7 +218,7 @@ namespace detail
         }
     };
 
-    // Results: a value becomes the result, expected<T> an error or its value, void NULL
+    /// Results: a value becomes the result, expected<T> an error or its value, void NULL
     class result_writer
     {
     public:
@@ -231,7 +232,7 @@ namespace detail
             respond(ctx, call, std::is_void<returned_type>(), is_expected<returned_type>());
         }
 
-        // For step() and inverse(), which return nothing or expected<void>: false when the call failed
+        /// For step() and inverse(), which return nothing or expected<void>: false when the call failed
         template <class Call>
         static bool proceed(
             native::context& ctx,

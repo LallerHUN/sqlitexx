@@ -1,17 +1,18 @@
 #ifndef SQLITEXX_VALUE_BYTES_HPP
 #define SQLITEXX_VALUE_BYTES_HPP
 
-// Blobs as std::byte (C++17) and std::span (C++20), next to sqlitexx::blob:
-//
-//   std::vector<std::byte>                         binds and reads as a blob, like blob
-//   std::span<const std::byte>, std::span<const unsigned char>
-//                                                  binds without a copy into a blob first; reading gives a view into
-//                                                  SQLite's memory, valid until the next step(), reset() or finalize()
-//   std::span<std::byte>, std::span<unsigned char>, fixed extents
-//                                                  bind only
-//
-// Before C++17 this header declares nothing, so it is safe to include in every standard; sqlitexx/value.hpp includes
-// it.
+/// \file
+/// Blobs as std::byte (C++17) and std::span (C++20), next to sqlitexx::blob:
+///
+///   std::vector<std::byte>                         binds and reads as a blob, like blob
+///   std::span<const std::byte>, std::span<const unsigned char>
+///                                                  binds without a copy into a blob first; reading gives a view into
+///                                                  SQLite's memory, valid until the next step(), reset() or finalize()
+///   std::span<std::byte>, std::span<unsigned char>, fixed extents
+///                                                  bind only
+///
+/// Before C++17 this header declares nothing, so it is safe to include in every standard; sqlitexx/value.hpp includes
+/// it.
 
 #include "sqlitexx/value.hpp"
 
@@ -68,7 +69,7 @@ struct value_traits<std::vector<std::byte>>
 
 namespace detail
 {
-    // The element types a span may have to bind as a blob
+    /// The element types a span may have to bind as a blob
     template <class T>
     struct is_blob_byte : std::false_type
     {
@@ -91,6 +92,8 @@ struct value_traits<
     typename std::enable_if<detail::is_blob_byte<std::remove_const_t<Byte>>::value>::type>
 {
     using span = std::span<Byte, Extent>;
+    /// Reading gives a view into SQLite's memory (see sqlitexx/results.hpp)
+    static constexpr bool reads_view = true;
 
     template <class Target>
     static native::result bind(
