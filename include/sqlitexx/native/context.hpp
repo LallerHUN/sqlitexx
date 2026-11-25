@@ -26,8 +26,13 @@ namespace native
 
         sqlite3_context* handle() const noexcept;
 
-        // The user_data pointer given to connection::create_function
+        // The user_data pointer given to connection::create_function, create_aggregate or create_window_function
         void* user_data() const noexcept;
+
+        // Memory for one aggregate's state (sqlite3_aggregate_context): zero-filled on the first call for a group,
+        // the same memory on later calls. With 0 bytes, nothing is allocated: null when no step() asked for memory.
+        // SQLite frees it after the final callback.
+        void* aggregate_context(std::size_t bytes) noexcept;
 
         // The result. Without a call the result is NULL.
         void result_null() noexcept;

@@ -13,6 +13,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <type_traits>
 
 namespace sqlitexx
 {
@@ -84,6 +85,15 @@ public:
         native::function_flags flags = native::function_flags::none
     );
 
+    // Aggregate functions written in C++, from a class with step(...) and finish() members; with inverse(...) and
+    // value() also a window function (see sqlitexx/aggregate.hpp). Each group works on its own copy of `prototype`.
+    template <class Aggregate>
+    expected<void> create_aggregate(
+        cstring_view name,
+        Aggregate&& prototype,
+        native::function_flags flags = native::function_flags::none
+    );
+
     // The native connection underneath, for what the typed layer does not cover
     native::connection& native_connection() noexcept;
     const native::connection& native_connection() const noexcept;
@@ -94,11 +104,28 @@ private:
     explicit database(native::connection&& opened) noexcept;
 
     error failure(native::result code) const;
+
+    template <class Caller>
+    native::result register_aggregate(
+        cstring_view name,
+        native::function_flags flags,
+        void* prototype,
+        std::false_type /*window*/
+    );
+
+    template <class Caller>
+    native::result register_aggregate(
+        cstring_view name,
+        native::function_flags flags,
+        void* prototype,
+        std::true_type /*window*/
+    );
 };
 
 } // sqlitexx
 
-// create_function() is defined with the machinery that calls the function
+// create_function() and create_aggregate() are defined with the machinery that calls them
+#include "sqlitexx/aggregate.hpp"
 #include "sqlitexx/function.hpp"
 
 #endif // SQLITEXX_DATABASE_HPP

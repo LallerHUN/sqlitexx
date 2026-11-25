@@ -11,13 +11,16 @@ namespace sqlitexx
 {
 namespace native
 {
-    // The callbacks connection::create_function takes, as in sqlite3_create_function_v2: the function itself, and what
-    // releases its user_data once SQLite no longer needs it.
+    // The callbacks connection::create_function, create_aggregate and create_window_function take, as in
+    // sqlite3_create_function_v2 and sqlite3_create_window_function: the function itself (and an aggregate's or window
+    // function's step and inverse), what gives an aggregate's result (final, and a window function's current value),
+    // and what releases the user_data once SQLite no longer needs it.
     using function_callback = void (*)(
         sqlite3_context* context,
         int argument_count,
         sqlite3_value** arguments
     );
+    using final_callback = void (*)(sqlite3_context* context);
     using destroy_callback = void (*)(void* user_data);
 
 } // native

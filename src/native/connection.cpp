@@ -229,5 +229,54 @@ namespace native
         ));
     }
 
+    result connection::create_aggregate(
+        const char* name,
+        int argument_count,
+        function_flags flags,
+        void* user_data,
+        function_callback step,
+        final_callback final,
+        destroy_callback destroy
+    ) noexcept
+    {
+        return result(sqlite3_create_function_v2(
+            db,
+            name,
+            argument_count,
+            SQLITE_UTF8 | static_cast<int>(flags),
+            user_data,
+            nullptr,
+            step,
+            final,
+            destroy
+        ));
+    }
+
+    result connection::create_window_function(
+        const char* name,
+        int argument_count,
+        function_flags flags,
+        void* user_data,
+        function_callback step,
+        final_callback final,
+        final_callback value,
+        function_callback inverse,
+        destroy_callback destroy
+    ) noexcept
+    {
+        return result(sqlite3_create_window_function(
+            db,
+            name,
+            argument_count,
+            SQLITE_UTF8 | static_cast<int>(flags),
+            user_data,
+            step,
+            final,
+            value,
+            inverse,
+            destroy
+        ));
+    }
+
 } // native
 } // sqlitexx
