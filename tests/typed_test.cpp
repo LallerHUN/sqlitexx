@@ -13,6 +13,7 @@
 #include <cstring>
 #include <initializer_list>
 #include <limits>
+#include <memory>
 #include <string>
 #include <tuple>
 #include <utility>
@@ -401,6 +402,42 @@ void test_columns_by_name()
     CHECK(!null_age && null_age.error().primary() == primary_code::mismatch);
     CHECK(!null_age && null_age.error().message().find("column 2 (age) is NULL") == 0);
 }
+// Move-only callables for the chaining helpers: each step owns the one moved in
+struct counting
+{
+    std::unique_ptr<int> token;
+    int* seen;
+
+    void operator()(const std::string&)
+    {
+        ++*seen;
+    }
+};
+
+struct fallback
+{
+    std::unique_ptr<int> value;
+
+    expected<int> operator()(const error&) const
+    {
+        return *value;
+    }
+};
+
+void test_move_only_steps()
+{
+    database db = open_users();
+    int seen = 0;
+    CHECK(db.prepare("SELECT name FROM user")
+              .and_then(sqlitexx::for_each_row<std::string>(counting{std::unique_ptr<int>(new int(0)), &seen}))
+              .has_value());
+    CHECK(seen > 0);
+
+    expected<int> none = db.prepare("SELECT 1 WHERE 0")
+                             .and_then(sqlitexx::first<int>())
+                             .or_else(sqlitexx::on(primary_code::done, fallback{std::unique_ptr<int>(new int(7))}));
+    CHECK(none && *none == 7);
+}
 } // anonymous
 
 int main()
@@ -416,6 +453,7 @@ int main()
     test_chaining();
     test_extended_codes();
     test_columns_by_name();
+    test_move_only_steps();
 
     return test::summary();
 }
