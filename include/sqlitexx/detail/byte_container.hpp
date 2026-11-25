@@ -6,7 +6,9 @@
 // (C++20). Containers of wider elements are left out on purpose: their bytes depend on the machine's integer size and
 // byte order.
 
+#include "sqlitexx/detail/utility.hpp"
 #include <cstddef>
+
 #include <type_traits>
 #include <utility>
 
@@ -14,12 +16,6 @@ namespace sqlitexx
 {
 namespace detail
 {
-    template <class... T>
-    struct make_void
-    {
-        using type = void;
-    };
-
     template <class T>
     struct is_byte : std::false_type
     {

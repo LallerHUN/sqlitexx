@@ -19,6 +19,16 @@ namespace native
         return sqlite3_user_data(ctx);
     }
 
+    void* context::aggregate_context(std::size_t bytes) noexcept
+    {
+        const std::size_t longest = 0x7FFFFFFF;
+        if (bytes > longest)
+        {
+            return nullptr;
+        }
+        return sqlite3_aggregate_context(ctx, static_cast<int>(bytes));
+    }
+
     void context::result_null() noexcept
     {
         sqlite3_result_null(ctx);

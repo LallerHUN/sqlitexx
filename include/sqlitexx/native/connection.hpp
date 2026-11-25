@@ -84,6 +84,31 @@ namespace native
             destroy_callback destroy
         ) noexcept;
 
+        // Aggregate functions: `step` runs for every row of a group, `final` gives the group's result.
+        result create_aggregate(
+            const char* name,
+            int argument_count,
+            function_flags flags,
+            void* user_data,
+            function_callback step,
+            final_callback final,
+            destroy_callback destroy
+        ) noexcept;
+
+        // Aggregates that also work as window functions (sqlite3_create_window_function): `value` gives the current
+        // result while the window moves, and `inverse` takes a row back out of it.
+        result create_window_function(
+            const char* name,
+            int argument_count,
+            function_flags flags,
+            void* user_data,
+            function_callback step,
+            final_callback final,
+            final_callback value,
+            function_callback inverse,
+            destroy_callback destroy
+        ) noexcept;
+
         // Errors of the most recent failed call on this connection
         const char* errmsg() const noexcept;
         result extended_errcode() const noexcept;

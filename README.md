@@ -273,7 +273,54 @@ sql::expected<std::string> hello = db.prepare("SELECT greet('Alice')").and_then(
   optimize the calls and use the function in an index.
 
 Your own types work as arguments and results when their `value_traits` are templates, as in
-[sqlitexx/value.hpp](include/sqlitexx/value.hpp). Aggregate and window functions are not supported yet.
+[sqlitexx/value.hpp](include/sqlitexx/value.hpp).
+
+### Aggregate and window functions
+
+`database::create_aggregate(name, prototype)` makes a class an aggregate, used like `SUM()` or `GROUP_CONCAT()`.
+The class has a `step(...)` member, called for every row, and a `finish()` member, which gives the result:
+
+```cpp
+struct joined
+{
+    std::string separator;
+    std::string text;
+
+    void step(const std::string& value) { text += text.empty() ? value : separator + value; }
+    std::string finish() const { return text; }
+};
+
+db.create_aggregate("joined", joined{", ", ""});
+
+sql::expected<std::string> names = db.prepare("SELECT joined(name) FROM player WHERE team = 'red'")
+                                       .and_then(sql::first<std::string>());   // "Ann, Bob, Dee"
+```
+
+- Each group works on its own copy of the prototype, so the prototype can carry settings like the separator.
+- `step()` takes its parameters like an SQL function: NULL only into `optional<T>`. It returns `void`, or
+  `expected<void>` to fail the query with that error.
+- `finish()` returns the result like an SQL function does: `optional<T>` for NULL, `expected<T>` to fail. For an
+  empty table it runs on a fresh copy that saw no rows, so a count gives 0.
+
+A class that also has `inverse(...)` (taking a row back out) and `value()` (the result so far) is registered as a
+window function too, for `OVER (...)`:
+
+```cpp
+struct moving_sum
+{
+    std::int64_t sum = 0;
+
+    void step(std::int64_t value) { sum += value; }
+    void inverse(std::int64_t value) { sum -= value; }
+    std::int64_t value() const { return sum; }
+    std::int64_t finish() const { return sum; }
+};
+
+db.create_aggregate("moving_sum", moving_sum());
+// SELECT moving_sum(amount) OVER (ORDER BY day ROWS BETWEEN 6 PRECEDING AND CURRENT ROW) FROM sales
+```
+
+Without `inverse()` and `value()`, using the aggregate with `OVER` is an error when the statement is prepared.
 
 ### Rows as a range
 
@@ -351,9 +398,10 @@ out->write(chunk);                        // continues from the position each ti
 sql::expected<sql::blob_stream> in = db.open_blob("file", "data", rowid);
 std::vector<unsigned char> all;
 in->read(all);                            // the rest of the blob; all.size() is what was read
+sql::expected<std::size_t> got = in->read(all, 4096);   // at most 4096 bytes; *got == all.size()
 
 std::array<unsigned char, 4096> buffer;   // or in pieces, without allocating
-sql::expected<std::size_t> got = in->read(buffer);   // up to buffer.size(); 0 at the end
+sql::expected<std::size_t> filled = in->read(buffer);   // up to buffer.size(); 0 at the end
 ```
 
 - `write()` takes any contiguous container of bytes (`std::vector`, `std::string`, `std::array`, `std::span`,

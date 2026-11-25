@@ -1,8 +1,8 @@
 #ifndef SQLITEXX_DETAIL_UTILITY_HPP
 #define SQLITEXX_DETAIL_UTILITY_HPP
 
-// Small metaprogramming helpers that std:: only has from C++14 or C++17 on (index_sequence, apply). sqlitexx's own
-// versions keep the library code C++11-clean.
+// Small metaprogramming helpers that std:: only has from C++14 or C++17 on (index_sequence, apply, void_t).
+// sqlitexx's own versions keep the library code C++11-clean.
 
 #include <cstddef>
 #include <tuple>
@@ -13,6 +13,13 @@ namespace sqlitexx
 {
 namespace detail
 {
+    // std::void_t, for detecting members: make_void<decltype(...)>::type is void when the expressions are valid
+    template <class... T>
+    struct make_void
+    {
+        using type = void;
+    };
+
     template <std::size_t... I>
     struct index_sequence
     {

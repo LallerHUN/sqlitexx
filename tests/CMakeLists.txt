@@ -1,4 +1,5 @@
 foreach(test_name
+    aggregate_test
     backup_test
     blob_stream_test
     busy_timeout_test

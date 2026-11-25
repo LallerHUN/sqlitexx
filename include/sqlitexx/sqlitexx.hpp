@@ -3,6 +3,7 @@
 
 // Everything sqlitexx offers. Include this, or the individual headers.
 
+#include "sqlitexx/aggregate.hpp"
 #include "sqlitexx/backup.hpp"
 #include "sqlitexx/blob_stream.hpp"
 #include "sqlitexx/chain.hpp"
