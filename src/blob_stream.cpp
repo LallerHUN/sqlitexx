@@ -25,7 +25,7 @@ std::size_t blob_stream::position() const noexcept
     return offset;
 }
 
-expected<void> blob_stream::seek(std::size_t to)
+expected<void> blob_stream::seek(std::size_t to) noexcept
 {
     if (!blob)
     {
@@ -35,9 +35,13 @@ expected<void> blob_stream::seek(std::size_t to)
     {
         return expected<void>(
             unexpect,
-            error(
+            detail::built_error(
                 native::result(SQLITE_RANGE),
-                "cannot seek to " + std::to_string(to) + " in a blob of " + std::to_string(length) + " bytes"
+                [&]
+                {
+                    return "cannot seek to " + std::to_string(to) + " in a blob of " + std::to_string(length)
+                        + " bytes";
+                }
             )
         );
     }
@@ -48,7 +52,7 @@ expected<void> blob_stream::seek(std::size_t to)
 expected<std::size_t> blob_stream::read(
     void* buffer,
     std::size_t count
-)
+) noexcept
 {
     if (!blob)
     {
@@ -73,7 +77,7 @@ expected<std::size_t> blob_stream::read(
 expected<void> blob_stream::write(
     const void* data,
     std::size_t count
-)
+) noexcept
 {
     if (!blob)
     {
@@ -83,10 +87,14 @@ expected<void> blob_stream::write(
     {
         return expected<void>(
             unexpect,
-            error(
+            detail::built_error(
                 native::result(SQLITE_RANGE),
-                "writing " + std::to_string(count) + " bytes at " + std::to_string(offset) + " goes past the end of a "
-                    + std::to_string(length) + "-byte blob; a blob's size cannot change through a stream"
+                [&]
+                {
+                    return "writing " + std::to_string(count) + " bytes at " + std::to_string(offset)
+                        + " goes past the end of a " + std::to_string(length)
+                        + "-byte blob; a blob's size cannot change through a stream";
+                }
             )
         );
     }
@@ -103,7 +111,7 @@ expected<void> blob_stream::write(
     return {};
 }
 
-expected<void> blob_stream::reopen(std::int64_t rowid)
+expected<void> blob_stream::reopen(std::int64_t rowid) noexcept
 {
     if (!blob)
     {
@@ -122,7 +130,7 @@ expected<void> blob_stream::reopen(std::int64_t rowid)
     return {};
 }
 
-expected<void> blob_stream::close()
+expected<void> blob_stream::close() noexcept
 {
     const native::result code = blob.close();
     length = 0;
@@ -139,7 +147,7 @@ native::blob_handle& blob_stream::native_blob() noexcept
     return blob;
 }
 
-error blob_stream::failure(native::result code) const
+error blob_stream::failure(native::result code) const noexcept
 {
     return detail::make_error(db, code);
 }
@@ -147,17 +155,21 @@ error blob_stream::failure(native::result code) const
 error blob_stream::too_many(
     std::size_t count,
     std::size_t available
-) const
+) const noexcept
 {
-    return error(
+    return detail::built_error(
         native::result(SQLITE_RANGE),
-        "a count of " + std::to_string(count) + " bytes is more than the container's " + std::to_string(available)
+        [&]
+        {
+            return "a count of " + std::to_string(count) + " bytes is more than the container's "
+                + std::to_string(available);
+        }
     );
 }
 
-error blob_stream::not_open() const
+error blob_stream::not_open() const noexcept
 {
-    return error(native::result(SQLITE_MISUSE), "the blob stream is not open");
+    return detail::error_with(native::result(SQLITE_MISUSE), "the blob stream is not open");
 }
 
 } // sqlitexx

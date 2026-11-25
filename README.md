@@ -199,7 +199,7 @@ too, so one kind of check covers both:
 |---|---|
 | `done` | `first()` found no row |
 | `mismatch` | NULL read into a non-optional type, or an integer that doesn't fit |
-| `nomem` | SQLite ran out of memory converting a column to text |
+| `nomem` | Out of memory, in SQLite or in sqlitexx (see [Out of memory](#out-of-memory)) |
 | `misuse` | `prepare()` was given no SQL statement, or more than one |
 
 `sqlitexx::on(code, handler)` handles one kind of error inside `or_else` and passes every other error on unchanged.
@@ -221,6 +221,38 @@ auto added = db.prepare("INSERT INTO user(name) VALUES(?)")
                      return sql::expected<bool>(false); // already there
                  }));
 ```
+
+### Out of memory
+
+With exceptions enabled, no sqlitexx call lets `std::bad_alloc` out. Running out of memory, whether in SQLite or in
+sqlitexx copying text, blobs or error messages, is an error with `primary_code::nomem`:
+
+```cpp
+sql::expected<std::string> name = stmt->column<std::string>(0);   // noexcept
+if (!name && name.error().primary() == sql::native::primary_code::nomem)
+{
+    // no try/catch needed
+}
+```
+
+- The calls that run none of your code are `noexcept`: `database::open`, `execute`, `prepare`, `backup_to`,
+  `open_blob`, `statement::step` and `reset`, the `blob_stream` calls that take a pointer, and `transaction`.
+- The calls that bind or read values are `noexcept` when the `value_traits` of the types are. The built-in ones are,
+  also for `std::string` and `blob`, so `bind(1, name)` and `column<std::string>(0)` are `noexcept`. With your own
+  traits they follow your `bind()` and `read()`: declare them `noexcept` when they cannot throw.
+- `create_function`, `create_aggregate` and the chaining helpers take what they keep by value. Passing an lvalue
+  copies it where you call them, in your code; the calls themselves only move, and are `noexcept` when moving can't
+  throw. So nothing they keep refers to your variables.
+- sqlitexx catches only its own allocations. What your code throws reaches you unchanged, `std::bad_alloc` included:
+  your traits, your callbacks, the copy constructors of what you register. The statement stays usable afterwards.
+  The one exception is code that SQLite calls, SQL functions and aggregates: there every exception becomes an error
+  of the SQL call, since none may unwind through SQLite.
+- When an error's message can't be copied, the error keeps its code and goes without a message.
+
+Without exceptions, a failed allocation ends the program, as it does in the standard library. SQLite's own out of
+memory is a `nomem` error either way. With MSVC's iterator debugging (its Debug builds), the standard library gives
+every `std::string` a proxy object on the heap, even an empty one, and ends the program itself when that fails; the
+guarantee holds in release builds.
 
 ### Chaining helpers
 

@@ -28,6 +28,7 @@
 
 #include "sqlitexx/database.hpp"
 #include "sqlitexx/detail/function_call.hpp"
+#include "sqlitexx/detail/out_of_memory.hpp"
 
 #include <new>
 #include <type_traits>
@@ -38,30 +39,28 @@ namespace sqlitexx
 template <class F>
 expected<void> database::create_function(
     cstring_view name,
-    F&& function,
+    F function,
     native::function_flags flags
-)
+) noexcept(std::is_nothrow_move_constructible<F>::value)
 {
-    using stored = typename std::decay<F>::type;
+    using stored = F;
     using caller = detail::function_caller<stored>;
 
     if (!db)
     {
         return expected<void>(
             unexpect,
-            error(
+            detail::error_with(
                 native::result(static_cast<int>(native::primary_code::misuse)),
                 "create_function() needs an open database"
             )
         );
     }
-    stored* owned = new (std::nothrow) stored(std::forward<F>(function));
+    // Running out of memory for SQLite's copy is an error; moving into it is the user's type's work
+    stored* owned = new (std::nothrow) stored(std::move(function));
     if (owned == nullptr)
     {
-        return expected<void>(
-            unexpect,
-            error(native::result(static_cast<int>(native::primary_code::nomem)), "out of memory copying the function")
-        );
+        return expected<void>(unexpect, detail::out_of_memory());
     }
 
     // From here SQLite owns the copy: it calls destroy when it is done with it, also when registering fails

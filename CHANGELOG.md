@@ -25,10 +25,22 @@ All notable changes to sqlitexx are listed here. The format is based on
   `count`: the most bytes to read, or the first bytes to write. `zeroblob{size}` binds a blob of zero bytes to
   reserve the space without building it in memory. Native layer: `native::blob_handle`.
 
+- With exceptions enabled, running out of memory in sqlitexx is a `primary_code::nomem` error instead of
+  `std::bad_alloc`: copying text and blobs, building error messages, and allocating the copies of what
+  `create_function` and `create_aggregate` register. Exceptions from user code pass through unchanged.
+
 ### Changed
 
 - The built-in `value_traits` take the statement as a template parameter, so they serve SQL functions as well. Traits
   written for `native::statement` keep working with statements.
+- The calls that run no user code are `noexcept`: `database::open`, `execute`, `prepare`, `busy_timeout`,
+  `backup_to`, `begin_backup_to`, `open_blob`, `statement::step`, `reset` and `column_index`, `backup::step`, the
+  `blob_stream` calls that take a pointer, and `transaction::begin`, `commit` and `rollback`. The built-in
+  `value_traits` are `noexcept`, and `statement::bind`, `bind_at`, `bind_named`, `execute`, `column`, `read_row` and
+  `first` are `noexcept` when the `value_traits` of their types are. `create_function` and `create_aggregate` are
+  `noexcept` when moving what they register cannot throw.
+- `create_function`, `create_aggregate`, `bind_values`, `execute_with`, `for_each_row` and `on()` take what they keep
+  by value and move it in, so an lvalue is copied at the call, in the caller's code.
 
 ## [0.2.0] - 2026-11-23
 

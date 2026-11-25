@@ -13,13 +13,13 @@ backup::backup(
 {
 }
 
-expected<bool> backup::step(int pages)
+expected<bool> backup::step(int pages) noexcept
 {
     if (!bak)
     {
         return expected<bool>(
             unexpect,
-            error(native::result(SQLITE_MISUSE), "step() needs a backup from database::begin_backup_to()")
+            detail::error_with(native::result(SQLITE_MISUSE), "step() needs a backup from database::begin_backup_to()")
         );
     }
     const native::result code = bak.step(pages);

@@ -7,6 +7,7 @@ foreach(test_name
     function_test
     native_test
     newer_types_test
+    out_of_memory_test
     rows_test
     typed_test
     transaction_test

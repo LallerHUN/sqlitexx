@@ -35,7 +35,7 @@ statement::statement(native::statement&& prepared) noexcept
 {
 }
 
-expected<bool> statement::step()
+expected<bool> statement::step() noexcept
 {
     const native::result code = stmt.step();
     if (code.row())
@@ -49,12 +49,12 @@ expected<bool> statement::step()
     return expected<bool>(unexpect, failure(code));
 }
 
-expected<void> statement::reset()
+expected<void> statement::reset() noexcept
 {
     return check(stmt.reset());
 }
 
-expected<int> statement::column_index(string_view name) const
+expected<int> statement::column_index(string_view name) const noexcept
 {
     const int count = stmt.column_count();
     for (int index = 0; index < count; ++index)
@@ -64,7 +64,13 @@ expected<int> statement::column_index(string_view name) const
         {
             return expected<int>(
                 unexpect,
-                error(native::result(SQLITE_NOMEM), "out of memory reading the name of column " + std::to_string(index))
+                detail::built_error(
+                    native::result(SQLITE_NOMEM),
+                    [&]
+                    {
+                        return "out of memory reading the name of column " + std::to_string(index);
+                    }
+                )
             );
         }
         if (same_identifier(name, column))
@@ -85,37 +91,50 @@ const native::statement& statement::native_statement() const noexcept
     return stmt;
 }
 
-error statement::failure(native::result code) const
+error statement::failure(native::result code) const noexcept
 {
     sqlite3* db = stmt.handle() == nullptr ? nullptr : sqlite3_db_handle(stmt.handle());
     return detail::make_error(db, code);
 }
 
-error statement::no_rows() const
+error statement::no_rows() const noexcept
 {
-    return error(native::result(SQLITE_DONE), "the query produced no rows");
+    return detail::error_with(native::result(SQLITE_DONE), "the query produced no rows");
 }
 
-error statement::no_parameter(const char* name) const
+error statement::no_parameter(const char* name) const noexcept
 {
-    return error(native::result(SQLITE_RANGE), std::string("the statement has no parameter named ") + name);
-}
-
-error statement::no_column(string_view name) const
-{
-    return error(
+    return detail::built_error(
         native::result(SQLITE_RANGE),
-        "the statement has no column named " + std::string(name.data(), name.size())
+        [&]
+        {
+            return std::string("the statement has no parameter named ") + name;
+        }
     );
 }
 
-error statement::null_column(int index) const
+error statement::no_column(string_view name) const noexcept
+{
+    return detail::built_error(
+        native::result(SQLITE_RANGE),
+        [&]
+        {
+            return "the statement has no column named " + std::string(name.data(), name.size());
+        }
+    );
+}
+
+error statement::null_column(int index) const noexcept
 {
     const char* name = stmt.column_name(index);
-    const std::string column = name == nullptr ? std::to_string(index) : std::to_string(index) + " (" + name + ")";
-    return error(
+    return detail::built_error(
         native::result(SQLITE_MISMATCH),
-        "column " + column + " is NULL; read it as an optional to accept NULL"
+        [&]
+        {
+            const std::string column =
+                name == nullptr ? std::to_string(index) : std::to_string(index) + " (" + name + ")";
+            return "column " + column + " is NULL; read it as an optional to accept NULL";
+        }
     );
 }
 

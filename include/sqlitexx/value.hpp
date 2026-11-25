@@ -19,6 +19,13 @@
 // read() is only called for non-NULL values; reading NULL into a type other than optional<T> is an error
 // (primary_code::mismatch) before read() is reached.
 //
+// The built-in traits are noexcept: reading text or a blob into a std::string or blob that runs out of memory gives a
+// primary_code::nomem error. Declare your own bind() and read() noexcept when they cannot throw, and the calls that
+// use them are noexcept as well (statement::bind and column<T>, for example). Without noexcept they work just the same,
+// and whatever they throw, std::bad_alloc included, passes through to the caller: sqlitexx catches only its own
+// allocations. The statement stays usable; only SQL functions catch everything, since nothing may unwind through
+// SQLite.
+//
 // Traits written for native::statement, as above, work for statements. To work for SQL functions too (arguments and
 // results, see sqlitexx/function.hpp), make bind() and read() templates over the statement type, as the built-in
 // traits are: SQL functions pass objects with the same bind_* and column_* members.
@@ -30,6 +37,7 @@
 
 #include "sqlitexx/config.hpp"
 #include "sqlitexx/cstring_view.hpp"
+#include "sqlitexx/detail/out_of_memory.hpp"
 #include "sqlitexx/expected.hpp"
 #include "sqlitexx/native/statement.hpp"
 
@@ -38,6 +46,7 @@
 #include <limits>
 #include <string>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 namespace sqlitexx
@@ -89,25 +98,38 @@ namespace detail
     expected<cstring_view> read_text(
         const Source& stmt,
         int index
-    )
+    ) noexcept
     {
         const optional<cstring_view> text = stmt.column_text(index);
         if (!text)
         {
             return expected<cstring_view>(
                 unexpect,
-                error(
-                    native::result(static_cast<int>(native::primary_code::nomem)),
-                    name_of(stmt, index) + ": out of memory converting the value to text"
+                built_error(
+                    nomem_result(),
+                    [&]
+                    {
+                        return name_of(stmt, index) + ": out of memory converting the value to text";
+                    }
                 )
             );
         }
         return *text;
     }
 
-    inline error out_of_range(const std::string& name)
+    template <class Source>
+    error out_of_range(
+        const Source& stmt,
+        int index
+    ) noexcept
     {
-        return error(mismatch_result(), name + ": the integer does not fit the requested type");
+        return built_error(
+            mismatch_result(),
+            [&]
+            {
+                return name_of(stmt, index) + ": the integer does not fit the requested type";
+            }
+        );
     }
 
     // Integer range checks without comparisons a compiler can call always true (-Wtype-limits): each kind of
@@ -218,12 +240,12 @@ struct value_traits<T, typename std::enable_if<std::is_integral<T>::value && !st
     static expected<T> read(
         const Source& stmt,
         int index
-    )
+    ) noexcept
     {
         const std::int64_t value = stmt.column_int64(index);
         if (!detail::fits_type<T>(value, detail::integer_kind<T>()))
         {
-            return expected<T>(unexpect, detail::out_of_range(detail::name_of(stmt, index)));
+            return expected<T>(unexpect, detail::out_of_range(stmt, index));
         }
         return static_cast<T>(value);
     }
@@ -246,7 +268,7 @@ struct value_traits<bool>
     static expected<bool> read(
         const Source& stmt,
         int index
-    )
+    ) noexcept
     {
         return stmt.column_int64(index) != 0;
     }
@@ -269,7 +291,7 @@ struct value_traits<T, typename std::enable_if<std::is_floating_point<T>::value>
     static expected<T> read(
         const Source& stmt,
         int index
-    )
+    ) noexcept
     {
         return static_cast<T>(stmt.column_double(index));
     }
@@ -292,14 +314,19 @@ struct value_traits<std::string>
     static expected<std::string> read(
         const Source& stmt,
         int index
-    )
+    ) noexcept
     {
-        const expected<cstring_view> text = detail::read_text(stmt, index);
+        expected<cstring_view> text = detail::read_text(stmt, index);
         if (!text)
         {
-            return expected<std::string>(unexpect, text.error());
+            return expected<std::string>(unexpect, std::move(text.error()));
         }
-        return std::string(text->data(), text->size());
+        return detail::allocation_guard(
+            [&]() -> expected<std::string>
+            {
+                return std::string(text->data(), text->size());
+            }
+        );
     }
 };
 
@@ -321,12 +348,12 @@ struct value_traits<string_view>
     static expected<string_view> read(
         const Source& stmt,
         int index
-    )
+    ) noexcept
     {
-        const expected<cstring_view> text = detail::read_text(stmt, index);
+        expected<cstring_view> text = detail::read_text(stmt, index);
         if (!text)
         {
-            return expected<string_view>(unexpect, text.error());
+            return expected<string_view>(unexpect, std::move(text.error()));
         }
         return text->view();
     }
@@ -350,7 +377,7 @@ struct value_traits<cstring_view>
     static expected<cstring_view> read(
         const Source& stmt,
         int index
-    )
+    ) noexcept
     {
         return detail::read_text(stmt, index);
     }
@@ -412,7 +439,7 @@ struct value_traits<blob>
     static expected<blob> read(
         const Source& stmt,
         int index
-    )
+    ) noexcept
     {
         const unsigned char* data = static_cast<const unsigned char*>(stmt.column_blob(index));
         const std::size_t size = stmt.column_bytes(index);
@@ -420,9 +447,26 @@ struct value_traits<blob>
         {
             return blob();
         }
-        return blob(data, data + size);
+        return detail::allocation_guard(
+            [&]() -> expected<blob>
+            {
+                return blob(data, data + size);
+            }
+        );
     }
 };
+
+namespace detail
+{
+    // Whether value_traits<T> binds to a Target without throwing
+    template <class T, class Target>
+    struct traits_bind_noexcept
+        : std::integral_constant<
+              bool,
+              noexcept(value_traits<T>::bind(std::declval<Target&>(), 0, std::declval<const T&>()))>
+    {
+    };
+} // detail
 
 // NULL when empty, the value otherwise.
 template <class T>
@@ -433,7 +477,10 @@ struct value_traits<optional<T>>
         Target& stmt,
         int index,
         const optional<T>& value
-    )
+    ) noexcept(detail::
+                   traits_bind_noexcept<
+                       T,
+                       Target>::value)
     {
         if (!value)
         {
@@ -446,7 +493,7 @@ struct value_traits<optional<T>>
     static expected<optional<T>> read(
         const Source& stmt,
         int index
-    )
+    ) noexcept(noexcept(value_traits<T>::read(stmt, index)) && std::is_nothrow_move_constructible<T>::value)
     {
         if (stmt.column_type(index) == native::value_type::null)
         {
@@ -455,7 +502,7 @@ struct value_traits<optional<T>>
         expected<T> value = value_traits<T>::read(stmt, index);
         if (!value)
         {
-            return expected<optional<T>>(unexpect, value.error());
+            return expected<optional<T>>(unexpect, std::move(value.error()));
         }
         return optional<T>(std::move(*value));
     }

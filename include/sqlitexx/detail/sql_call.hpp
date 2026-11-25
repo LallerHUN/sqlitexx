@@ -7,6 +7,7 @@
 
 #include "sqlitexx/config.hpp"
 #include "sqlitexx/detail/function_values.hpp"
+#include "sqlitexx/detail/out_of_memory.hpp"
 #include "sqlitexx/detail/utility.hpp"
 #include "sqlitexx/error.hpp"
 #include "sqlitexx/expected.hpp"
@@ -20,12 +21,8 @@
 #include <type_traits>
 #include <utility>
 
-#if defined(__cpp_exceptions) || defined(__EXCEPTIONS) || defined(_CPPUNWIND)
+#if SQLITEXX_DETAIL_EXCEPTIONS
 #include <exception>
-#include <new>
-#define SQLITEXX_SQL_CALL_CATCHES 1
-#else
-#define SQLITEXX_SQL_CALL_CATCHES 0
 #endif
 
 namespace sqlitexx
@@ -102,7 +99,7 @@ namespace detail
         Body&& body
     ) noexcept
     {
-#if SQLITEXX_SQL_CALL_CATCHES
+#if SQLITEXX_DETAIL_EXCEPTIONS
         try
         {
             body();
@@ -343,7 +340,5 @@ namespace detail
     };
 } // detail
 } // sqlitexx
-
-#undef SQLITEXX_SQL_CALL_CATCHES
 
 #endif // SQLITEXX_DETAIL_SQL_CALL_HPP

@@ -405,6 +405,25 @@ void test_deterministic()
     CHECK(found && *found == "MiXeD");
 }
 
+// A move-only callable: SQLite keeps the one moved in, nothing copies it
+struct shifted
+{
+    std::unique_ptr<int> by;
+
+    int operator()(int value) const
+    {
+        return value + *by;
+    }
+};
+
+void test_move_only()
+{
+    database db = open_memory();
+    CHECK(db.create_function("shifted", shifted{std::unique_ptr<int>(new int(10))}).has_value());
+    expected<int> result = select<int>(db, "SELECT shifted(5)");
+    CHECK(result && *result == 15);
+}
+
 #if SQLITEXX_TEST_EXCEPTIONS
 void test_exceptions()
 {
@@ -432,6 +451,7 @@ int main()
     test_void_state_and_lifetime();
     test_own_types();
     test_deterministic();
+    test_move_only();
 #if SQLITEXX_TEST_EXCEPTIONS
     test_exceptions();
 #endif

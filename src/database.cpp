@@ -30,7 +30,7 @@ database::database(native::connection&& opened) noexcept
 expected<database> database::open(
     const char* filename,
     native::open_flags flags
-)
+) noexcept
 {
     native::connection connection;
     const native::result code = connection.open(filename, flags);
@@ -41,7 +41,7 @@ expected<database> database::open(
     return database(std::move(connection));
 }
 
-expected<void> database::execute(const char* sql)
+expected<void> database::execute(const char* sql) noexcept
 {
     const native::result code = db.exec(sql);
     if (code.failed())
@@ -51,7 +51,7 @@ expected<void> database::execute(const char* sql)
     return {};
 }
 
-expected<statement> database::prepare(string_view sql)
+expected<statement> database::prepare(string_view sql) noexcept
 {
     native::statement prepared;
     string_view tail;
@@ -64,7 +64,7 @@ expected<statement> database::prepare(string_view sql)
     {
         return expected<statement>(
             unexpect,
-            error(native::result(SQLITE_MISUSE), "prepare() was given no SQL statement")
+            detail::error_with(native::result(SQLITE_MISUSE), "prepare() was given no SQL statement")
         );
     }
 
@@ -78,7 +78,10 @@ expected<statement> database::prepare(string_view sql)
         {
             return expected<statement>(
                 unexpect,
-                error(native::result(SQLITE_MISUSE), "prepare() takes one SQL statement; use execute() to run several")
+                detail::error_with(
+                    native::result(SQLITE_MISUSE),
+                    "prepare() takes one SQL statement; use execute() to run several"
+                )
             );
         }
     }
@@ -95,7 +98,7 @@ std::int64_t database::changes() const noexcept
     return db.changes();
 }
 
-expected<void> database::busy_timeout(std::chrono::milliseconds timeout)
+expected<void> database::busy_timeout(std::chrono::milliseconds timeout) noexcept
 {
     // The parentheses keep a max macro (<windows.h> without NOMINMAX) out of the call
     const std::chrono::milliseconds::rep longest = (std::numeric_limits<int>::max)();
@@ -113,18 +116,18 @@ expected<void> database::backup_to(
     database& destination,
     cstring_view source_schema,
     cstring_view destination_schema
-)
+) noexcept
 {
     expected<backup> started = begin_backup_to(destination, source_schema, destination_schema);
     if (!started)
     {
-        return expected<void>(unexpect, started.error());
+        return expected<void>(unexpect, std::move(started.error()));
     }
     // A negative count copies every page in one step
     expected<bool> done = started->step(-1);
     if (!done)
     {
-        return expected<void>(unexpect, done.error());
+        return expected<void>(unexpect, std::move(done.error()));
     }
     return {};
 }
@@ -133,11 +136,14 @@ expected<backup> database::begin_backup_to(
     database& destination,
     cstring_view source_schema,
     cstring_view destination_schema
-)
+) noexcept
 {
     if (!db || !destination.db)
     {
-        return expected<backup>(unexpect, error(native::result(SQLITE_MISUSE), "a backup needs both databases open"));
+        return expected<backup>(
+            unexpect,
+            detail::error_with(native::result(SQLITE_MISUSE), "a backup needs both databases open")
+        );
     }
     native::backup started;
     const native::result code = started.init(destination.db, destination_schema.c_str(), db, source_schema.c_str());
@@ -154,13 +160,13 @@ expected<blob_stream> database::open_blob(
     std::int64_t rowid,
     blob_access access,
     cstring_view schema
-)
+) noexcept
 {
     if (!db)
     {
         return expected<blob_stream>(
             unexpect,
-            error(native::result(SQLITE_MISUSE), "open_blob() needs an open database")
+            detail::error_with(native::result(SQLITE_MISUSE), "open_blob() needs an open database")
         );
     }
     native::blob_handle opened;
@@ -183,7 +189,7 @@ const native::connection& database::native_connection() const noexcept
     return db;
 }
 
-error database::failure(native::result code) const
+error database::failure(native::result code) const noexcept
 {
     return detail::make_error(db.handle(), code);
 }
