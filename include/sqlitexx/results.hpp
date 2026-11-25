@@ -23,7 +23,8 @@
 /// last element.
 ///
 /// Every loop, first() and all() runs the query from the start, with the same arguments, and sees the data as it is
-/// then. next(count) is the exception: it reads on from where the previous next() stopped, a page at a time. Rows are
+/// then. next(count) and skip(count) are the exception: they go on from where the previous one stopped, a page at a
+/// time. Rows are
 /// read one step at a time; nothing is cached or read ahead.
 
 #include "sqlitexx/config.hpp"
@@ -124,9 +125,10 @@ public:
     ///@}
 
     /// \name Pages
-    /// next(count) reads up to `count` rows from where the previous next() stopped; the first call, and the first
-    /// after a loop, first() or all(), starts the query from the beginning. An empty vector means there are no more
-    /// rows, and further calls stay empty until something else runs the query again.
+    /// next(count) reads up to `count` rows from where the previous next() or skip() stopped; skip(count) passes over
+    /// up to `count` rows without reading them and gives how many it passed. The first call, and the first after a
+    /// loop, first() or all(), starts the query from the beginning. An empty page means there are no more rows, and
+    /// further calls stay empty until something else runs the query again.
     ///
     ///     sqlitexx::results<std::string> names = db.query<std::string>("SELECT name FROM user ORDER BY name");
     ///     for (;;)
@@ -139,35 +141,27 @@ public:
     ///         show(*page);
     ///     }
     ///
-    /// A row that can't be read (NULL into a non-optional type) makes the call return that error, and the rows of the
+    /// Rows 3 to 8 are skip(2), then next(6). SQL can do the same with LIMIT and OFFSET, which spares SQLite reading
+    /// the skipped rows' columns: "... LIMIT 6 OFFSET 2".
+    ///
+    /// A row that can't be read (NULL into a non-optional type) makes next() return that error, and the rows of the
     /// page read before it are dropped; the next call goes on after that row. When stepping fails, the error ends the
-    /// pages. Views never compile here, as with all().
+    /// pages. Views never compile with next(), as with all().
     ///@{
     SQLITEXX_DETAIL_NODISCARD expected<std::vector<row<T...>>> next(std::size_t count)
     {
         static_assert(!detail::any_reads_view<T...>::value, SQLITEXX_DETAIL_VIEWS_IN_VECTOR);
         using page_rows = expected<std::vector<row<T...>>>;
-        if (!source)
-        {
-            return page_rows(unexpect, copied_error());
-        }
-        if (paging == page_state::closed)
-        {
-            rewind();
-            paging = page_state::open;
-        }
         std::vector<row<T...>> rows;
-        while (paging == page_state::open && rows.size() < count)
+        while (rows.size() < count)
         {
-            expected<bool> stepped = source->step();
+            expected<bool> stepped = step_page();
             if (!stepped)
             {
-                paging = page_state::finished;
                 return page_rows(unexpect, std::move(stepped.error()));
             }
             if (!*stepped)
             {
-                paging = page_state::finished;
                 break;
             }
             value_type element = source->template read_row<T...>();
@@ -182,10 +176,29 @@ public:
         }
         return page_rows(std::move(rows));
     }
+
+    SQLITEXX_DETAIL_NODISCARD expected<std::size_t> skip(std::size_t count) noexcept
+    {
+        std::size_t skipped = 0;
+        while (skipped < count)
+        {
+            expected<bool> stepped = step_page();
+            if (!stepped)
+            {
+                return expected<std::size_t>(unexpect, std::move(stepped.error()));
+            }
+            if (!*stepped)
+            {
+                break;
+            }
+            ++skipped;
+        }
+        return skipped;
+    }
     ///@}
 
 private:
-    /// Where next() stands: not started (or interrupted by another run), reading pages, or past the last row
+    /// Where next() and skip() stand: not started (or interrupted by another run), reading pages, or past the last row
     enum class page_state
     {
         closed,
@@ -228,6 +241,31 @@ private:
 #else
         return source.error();
 #endif
+    }
+
+    /// One step for next() and skip(): true when a row is ready, false past the last one. Opens the pages first when
+    /// they aren't.
+    expected<bool> step_page() noexcept
+    {
+        if (!source)
+        {
+            return expected<bool>(unexpect, copied_error());
+        }
+        if (paging == page_state::closed)
+        {
+            rewind();
+            paging = page_state::open;
+        }
+        if (paging == page_state::finished)
+        {
+            return false;
+        }
+        expected<bool> stepped = source->step();
+        if (!stepped || !*stepped)
+        {
+            paging = page_state::finished;
+        }
+        return stepped;
     }
 
     value_type read_first()

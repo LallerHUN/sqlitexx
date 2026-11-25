@@ -288,6 +288,22 @@ sql::results<std::string> users = db.query<std::string>("SELECT name FROM user O
 sql::expected<std::vector<std::string>> page = users.next(20);
 ```
 
+Rows 3 to 8 can come from SQL or from C++:
+
+```cpp
+// LIMIT and OFFSET: SQLite skips the first rows without reading their columns
+sql::expected<std::vector<std::string>> some =
+    db.query<std::string>("SELECT name FROM user ORDER BY name LIMIT ? OFFSET ?", 6, 2).all();
+
+// skip(count) passes over rows, then next(count) reads on; skip gives how many it passed
+sql::results<std::string> names = db.query<std::string>("SELECT name FROM user ORDER BY name");
+sql::expected<std::size_t> skipped = names.skip(2);
+sql::expected<std::vector<std::string>> rows_3_to_8 = names.next(6);
+
+// C++20: results is a range, so the standard views work on it too
+for (sql::expected<std::string>& name : names | std::views::drop(2) | std::views::take(6)) { ... }
+```
+
 - The rows are a `results<T...>`, which owns its statement, so the loop above is safe in every C++ standard.
 - Each element is an `expected`. When preparing or binding fails, the error is the only element; when a row can't
   be read (NULL into a non-optional type), only that row is an error; when stepping fails, that error is the last
@@ -295,7 +311,7 @@ sql::expected<std::vector<std::string>> page = users.next(20);
 - `first()` gives a `done` error when there is no row, so `on(native::primary_code::done, ...)` turns that into a
   value. `all()` reads every row into a `std::vector`.
 - Every loop, `first()` and `all()` runs the query again from the start and sees the data as it is then. `next()`
-  reads on from where the previous `next()` stopped, and starts over after any of the others. Rows are read one step
+  and `skip()` go on from where the previous one stopped, and start over after any of the others. Rows are read one step
   at a time: nothing is cached or read ahead.
 - A row that can't be read fails its page in `next()`, and the next page goes on after it.
 - Inside a loop, `string_view` and the other views point into the current row. `first()` on a temporary, as in
