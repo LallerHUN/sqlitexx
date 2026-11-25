@@ -346,13 +346,23 @@ memory whole. The `blob_stream` it gives has a position, like a file:
 db.prepare("INSERT INTO file(data) VALUES(?)").and_then(sql::execute_with(sql::zeroblob{size}));
 sql::expected<sql::blob_stream> out =
     db.open_blob("file", "data", db.last_insert_rowid(), sql::blob_access::read_write);
-out->write(chunk.data(), chunk.size());   // continues from the position each time
+out->write(chunk);                        // continues from the position each time
 
 sql::expected<sql::blob_stream> in = db.open_blob("file", "data", rowid);
-unsigned char buffer[4096];
-sql::expected<std::size_t> got = in->read(buffer, sizeof buffer);   // 0 at the end
+std::vector<unsigned char> all;
+in->read(all);                            // the rest of the blob; all.size() is what was read
+
+std::array<unsigned char, 4096> buffer;   // or in pieces, without allocating
+sql::expected<std::size_t> got = in->read(buffer);   // up to buffer.size(); 0 at the end
 ```
 
+- `write()` takes any contiguous container of bytes (`std::vector`, `std::string`, `std::array`, `std::span`,
+  `string_view`, C arrays), or a pointer and a size. A count writes only the first bytes.
+- `read()` into a container that can grow (`std::vector`, `std::string`) sizes it to what was read. Into one that
+  can't (`std::array`, `std::span`, C arrays) it fills up to the size and gives the count, without allocating. A
+  count limits either.
+- Containers hold bytes: `char`, `signed char`, `unsigned char`, `std::byte` or `char8_t`. Wider elements don't
+  compile, since their bytes depend on the machine.
 - `read()` gives how many bytes it read: fewer near the end, 0 at the end. `seek()` moves the position.
 - Writing past the end is a `range` error and writes nothing. Reserve the size with `zeroblob` when inserting.
 - `reopen(rowid)` moves to the same column of another row, much faster than opening again.
