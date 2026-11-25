@@ -6,6 +6,8 @@ All notable changes to sqlitexx are listed here. The format is based on
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-25
+
 ### Added
 
 - `database::create_collation(name, compare)`: collations written in C++, for `COLLATE`, `ORDER BY` and indexes.
@@ -108,7 +110,8 @@ All notable changes to sqlitexx are listed here. The format is based on
 - CMake package for `find_package(sqlitexx)`, `FetchContent` and `add_subdirectory`. SQLite 3.54.1 is bundled, or
   the system SQLite is used with `SQLITEXX_USE_SYSTEM_SQLITE=ON`.
 
-[Unreleased]: https://github.com/LallerHUN/sqlitexx/compare/v0.3.0...develop
+[Unreleased]: https://github.com/LallerHUN/sqlitexx/compare/v0.4.0...develop
+[0.4.0]: https://github.com/LallerHUN/sqlitexx/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/LallerHUN/sqlitexx/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/LallerHUN/sqlitexx/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/LallerHUN/sqlitexx/releases/tag/v0.1.0
