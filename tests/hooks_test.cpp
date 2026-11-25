@@ -383,6 +383,26 @@ void test_registrations()
     CHECK(outliving.remove().has_value());
 }
 
+// Clearing with nullptr what a token holds: the hook ends at once, and one set afterwards stays when the token ends
+void test_cleared_by_nullptr()
+{
+    int ended = 0;
+    int commits = 0;
+    database db = open_items();
+    {
+        registrations scope;
+        CHECK(db.commit_hook(counting_commits(&ended, &commits), scope).has_value());
+        CHECK(db.commit_hook(nullptr).has_value());
+        CHECK(ended == 1);
+        CHECK(db.execute("INSERT INTO item VALUES('a')").has_value());
+        CHECK(commits == 0);
+        CHECK(db.commit_hook(counting_commits(&ended, &commits)).has_value());
+    }
+    CHECK(ended == 1);
+    CHECK(db.execute("INSERT INTO item VALUES('b')").has_value());
+    CHECK(commits == 1);
+}
+
 #if SQLITEXX_TEST_EXCEPTIONS
 void test_exceptions()
 {
@@ -476,6 +496,7 @@ int main()
     test_replace_and_release();
     test_moving_the_database();
     test_registrations();
+    test_cleared_by_nullptr();
 #if SQLITEXX_TEST_EXCEPTIONS
     test_exceptions();
 #endif

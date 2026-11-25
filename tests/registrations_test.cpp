@@ -243,6 +243,49 @@ void test_gone_already()
     CHECK(outliving.empty());
 }
 
+// Removing by name what a token holds: the callable ends at once, the token finds nothing left, and what is
+// registered again under the name afterwards stays when the token ends
+void test_removed_by_name()
+{
+    int ended = 0;
+    int factor = 1;
+    database db = open_memory();
+    {
+        registrations scope;
+        CHECK(db.create_function("scaled", tracked(&ended, &factor), scope).has_value());
+        CHECK(db.create_collation("ordered", tracked_order(&ended, &factor), scope).has_value());
+
+        // Another number of parameters is another function: the token's one stays
+        CHECK(db.remove_function("scaled", 2).has_value());
+        CHECK(ended == 0);
+        CHECK(select<int>(db, "SELECT scaled(1)").has_value());
+
+        CHECK(db.remove_function("scaled", 1).has_value());
+        CHECK(db.remove_collation("ordered").has_value());
+        CHECK(ended == 2);
+        CHECK(db.create_function(
+                    "scaled",
+                    [](int value)
+                    {
+                        return value + 100;
+                    }
+        ).has_value());
+        CHECK(db.create_collation(
+                    "ordered",
+                    [](string_view first, string_view second)
+                    {
+                        return second.compare(first);
+                    }
+        ).has_value());
+    }
+    CHECK(ended == 2);
+    expected<int> scaled = select<int>(db, "SELECT scaled(1)");
+    CHECK(scaled && *scaled == 101);
+    expected<std::string> first =
+        select<std::string>(db, "SELECT x FROM (SELECT 'a' x UNION ALL SELECT 'b') ORDER BY x COLLATE ordered LIMIT 1");
+    CHECK(first && *first == "b");
+}
+
 void test_busy()
 {
     int ended = 0;
@@ -399,6 +442,7 @@ int main()
     test_scope_removes();
     test_remove_and_release();
     test_gone_already();
+    test_removed_by_name();
     test_busy();
     test_ended_while_running();
     test_move();
