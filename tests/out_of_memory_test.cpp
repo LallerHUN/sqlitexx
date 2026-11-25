@@ -121,12 +121,14 @@ struct string_capture
     }
 };
 
-// Never called: the checks are in unevaluated operands
+// Never called: the checks are in unevaluated operands. A string_view comes in ready made: noexcept(...) includes
+// converting arguments, and string-view-lite does not mark its constructors noexcept for every compiler.
 inline void noexcept_checks(
     database& db,
     statement& stmt,
     sqlitexx::blob_stream& stream,
     const std::string& name,
+    sqlitexx::string_view view,
     const no_capture& plain,
     const string_capture& capturing
 )
@@ -134,12 +136,12 @@ inline void noexcept_checks(
     // The calls that run none of the user's code
     SQLITEXX_TEST_NOEXCEPT(database::open(":memory:"));
     SQLITEXX_TEST_NOEXCEPT(db.execute(""));
-    SQLITEXX_TEST_NOEXCEPT(db.prepare(""));
+    SQLITEXX_TEST_NOEXCEPT(db.prepare(view));
     SQLITEXX_TEST_NOEXCEPT(db.backup_to(db));
     SQLITEXX_TEST_NOEXCEPT(db.open_blob("t", "c", 1));
     SQLITEXX_TEST_NOEXCEPT(stmt.step());
     SQLITEXX_TEST_NOEXCEPT(stmt.reset());
-    SQLITEXX_TEST_NOEXCEPT(stmt.column_index("name"));
+    SQLITEXX_TEST_NOEXCEPT(stmt.column_index(view));
     SQLITEXX_TEST_NOEXCEPT(stream.write(nullptr, 0));
     SQLITEXX_TEST_NOEXCEPT(sqlitexx::transaction::begin(db));
     SQLITEXX_TEST_NOEXCEPT(sqlitexx::detail::out_of_memory());
@@ -148,7 +150,7 @@ inline void noexcept_checks(
     SQLITEXX_TEST_NOEXCEPT(stmt.bind(1, name, "text", nullptr));
     SQLITEXX_TEST_NOEXCEPT(stmt.execute(2.5, optional<int>()));
     SQLITEXX_TEST_NOEXCEPT(stmt.column<std::string>(0));
-    SQLITEXX_TEST_NOEXCEPT(stmt.column<blob>("data"));
+    SQLITEXX_TEST_NOEXCEPT(stmt.column<blob>(view));
     SQLITEXX_TEST_NOEXCEPT(stmt.column<optional<std::string>>(0));
     SQLITEXX_TEST_NOEXCEPT(stmt.first<std::string, optional<std::int64_t>>());
     SQLITEXX_TEST_NOT_NOEXCEPT(stmt.bind(loose{1}));
