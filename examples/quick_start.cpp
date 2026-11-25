@@ -4,6 +4,7 @@
 
 #include <cstdio>
 #include <string>
+#include <tuple>
 
 namespace sql = sqlitexx;
 
@@ -41,20 +42,24 @@ int main()
         std::printf("expected failure: %s\n", duplicate.error().message().c_str());
     }
 
-    // Read every row: one column gives the value, several a std::tuple or a callback with one argument per column
-    sql::expected<void> listed =
-        db.prepare("SELECT name, age FROM user ORDER BY id")
-            .and_then(
-                sql::for_each_row<std::string, sql::optional<int>>(
-                    [](const std::string& name, sql::optional<int> age)
-                    {
-                        std::printf("%s: %s\n", name.c_str(), age ? std::to_string(*age).c_str() : "unknown");
-                    }
-                )
-            );
+    // Query: one type per column, a std::tuple for several. Each row is an expected, so errors can't slip through.
+    bool listed = true;
+    for (sql::expected<std::tuple<std::string, sql::optional<int>>>& user :
+         db.query<std::string, sql::optional<int>>("SELECT name, age FROM user WHERE id >= ? ORDER BY id", 1))
+    {
+        if (!user)
+        {
+            std::printf("cannot list: %s\n", user.error().message().c_str());
+            listed = false;
+            break;
+        }
+        const sql::optional<int>& age = std::get<1>(*user);
+        std::printf("%s: %s\n", std::get<0>(*user).c_str(), age ? std::to_string(*age).c_str() : "unknown");
+    }
 
-    // One row in one line, and one kind of error turned into a value: no such user gives -1
-    sql::expected<int> carol = db.query_row<int>("SELECT age FROM user WHERE name = ?", "Carol")
+    // One row, and one kind of error turned into a value: no such user gives -1
+    sql::expected<int> carol = db.query<int>("SELECT age FROM user WHERE name = ?", "Carol")
+                                   .first()
                                    .or_else(
                                        sql::on(
                                            sql::native::primary_code::done,

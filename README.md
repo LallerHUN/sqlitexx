@@ -19,6 +19,7 @@ The [API reference](https://lallerhun.github.io/sqlitexx/) documents every class
 
 #include <cstdio>
 #include <string>
+#include <tuple>
 
 namespace sql = sqlitexx;
 
@@ -56,20 +57,24 @@ int main()
         std::printf("expected failure: %s\n", duplicate.error().message().c_str());
     }
 
-    // Read every row: one column gives the value, several a std::tuple or a callback with one argument per column
-    sql::expected<void> listed =
-        db.prepare("SELECT name, age FROM user ORDER BY id")
-            .and_then(
-                sql::for_each_row<std::string, sql::optional<int>>(
-                    [](const std::string& name, sql::optional<int> age)
-                    {
-                        std::printf("%s: %s\n", name.c_str(), age ? std::to_string(*age).c_str() : "unknown");
-                    }
-                )
-            );
+    // Query: one type per column, a std::tuple for several. Each row is an expected, so errors can't slip through.
+    bool listed = true;
+    for (sql::expected<std::tuple<std::string, sql::optional<int>>>& user :
+         db.query<std::string, sql::optional<int>>("SELECT name, age FROM user WHERE id >= ? ORDER BY id", 1))
+    {
+        if (!user)
+        {
+            std::printf("cannot list: %s\n", user.error().message().c_str());
+            listed = false;
+            break;
+        }
+        const sql::optional<int>& age = std::get<1>(*user);
+        std::printf("%s: %s\n", std::get<0>(*user).c_str(), age ? std::to_string(*age).c_str() : "unknown");
+    }
 
-    // One row in one line, and one kind of error turned into a value: no such user gives -1
-    sql::expected<int> carol = db.query_row<int>("SELECT age FROM user WHERE name = ?", "Carol")
+    // One row, and one kind of error turned into a value: no such user gives -1
+    sql::expected<int> carol = db.query<int>("SELECT age FROM user WHERE name = ?", "Carol")
+                                   .first()
                                    .or_else(
                                        sql::on(
                                            sql::native::primary_code::done,
@@ -202,10 +207,10 @@ meant, say so: `static_cast<void>(db.execute("DELETE FROM t"));`. The chaining h
 
 | Primary code | Meaning in sqlitexx |
 |---|---|
-| `done` | `first()` or `query_row()` found no row |
+| `done` | `first()` found no row |
 | `mismatch` | NULL read into a non-optional type, or an integer that doesn't fit |
 | `nomem` | Out of memory, in SQLite or in sqlitexx (see [Out of memory](#out-of-memory)) |
-| `misuse` | `prepare()`, `query_row()` or `execute(sql, args...)` was given no SQL statement, or more than one |
+| `misuse` | `prepare()`, `query()` or `execute(sql, args...)` was given no SQL statement, or more than one |
 
 `sqlitexx::on(code, handler)` handles one kind of error inside `or_else` and passes every other error on unchanged.
 `code` is either of these:
@@ -258,29 +263,53 @@ memory is a `nomem` error either way. With MSVC's iterator debugging (its Debug 
 every `std::string` a proxy object on the heap, even an empty one, and ends the program itself when that fails; the
 guarantee holds in release builds.
 
-### One-liners
+### Queries
 
-For SQL you run once, `query_row` and `execute` with arguments prepare the statement, bind the arguments to
-parameters 1, 2, 3, ..., run it and finalize it in one call:
+`db.query<T...>(sql, args...)` runs a query with its arguments bound to parameters 1, 2, 3, ... and gives its rows,
+one type per column. Iterate it, or take the first row or all of them:
 
 ```cpp
-sql::expected<int> age = db.query_row<int>("SELECT age FROM user WHERE name = ?", "Alice");
+for (sql::expected<std::tuple<std::string, int>>& user :
+     db.query<std::string, int>("SELECT name, age FROM user WHERE age >= ?", 18))
+{
+    if (!user)
+    {
+        std::printf("%s\n", user.error().message().c_str());
+        break;
+    }
+    std::printf("%s is %d\n", std::get<0>(*user).c_str(), std::get<1>(*user));
+}
 
-sql::expected<std::tuple<std::string, sql::optional<int>>> user =
-    db.query_row<std::string, sql::optional<int>>("SELECT name, age FROM user WHERE id = ?", 7);
-
-sql::expected<void> added = db.execute("INSERT INTO user(name, age) VALUES(?, ?)", "Dee", 41);
+sql::expected<std::int64_t> count = db.query<std::int64_t>("SELECT count(*) FROM user").first();
+sql::expected<std::vector<std::string>> names = db.query<std::string>("SELECT name FROM user").all();
 ```
 
-- `query_row<T...>` reads the first row: one column gives the value, several a `std::tuple`. No row is a `done`
-  error, as with `first()`, so `on(native::primary_code::done, ...)` turns it into a value.
-- The statement is gone by the time the row comes back, so types that read as a view into it (`string_view`,
-  `cstring_view`, `std::span`) don't compile with `query_row`: read a `std::string` or a blob. Your own
-  `value_traits` say they read a view with `static constexpr bool reads_view = true;`.
-- `execute(sql)` without arguments runs a script of several statements; with arguments, SQL holding more than one
-  statement is a `misuse` error, as with `prepare()`.
-- Each call prepares the SQL again. For SQL you run many times, prepare it once and call `statement::execute(args...)`
-  or `first()` on it.
+- The rows are a `results<T...>`, which owns its statement, so the loop above is safe in every C++ standard.
+- Each element is an `expected`. When preparing or binding fails, the error is the only element; when a row can't
+  be read (NULL into a non-optional type), only that row is an error; when stepping fails, that error is the last
+  element. `first()` and `all()` give the first error they meet.
+- `first()` gives a `done` error when there is no row, so `on(native::primary_code::done, ...)` turns that into a
+  value. `all()` reads every row into a `std::vector`.
+- Every loop, `first()` and `all()` runs the query again from the start and sees the data as it is then. Rows are
+  read one step at a time: nothing is cached or read ahead.
+- Inside a loop, `string_view` and the other views point into the current row. `first()` and `all()` on a
+  temporary, as in `db.query<sql::string_view>(sql).first()`, don't compile with them, since the statement ends
+  before you could use the view: read a `std::string` or a blob, or keep the `results` in a variable. Your own
+  `value_traits` say they read a view with `static constexpr bool reads_view = true;`. The `first<T>()` chaining
+  step on a statement fresh from `prepare()` checks the same.
+
+For SQL whose rows you don't need, and for SQL you run many times:
+
+```cpp
+sql::expected<void> added = db.execute("INSERT INTO user(name, age) VALUES(?, ?)", "Dee", 41);
+
+sql::expected<sql::statement> insert = db.prepare("INSERT INTO user(name, age) VALUES(?, ?)", "Eve", 29);
+```
+
+- `execute(sql)` without arguments runs a script of several statements. With arguments, `execute`, `query` and
+  `prepare` take one statement, and SQL holding more is a `misuse` error, as with `prepare(sql)`.
+- `query` and `execute` prepare the SQL on every call. For SQL you run many times, prepare it once (with or without
+  arguments) and call `statement::execute(args...)`, `first()` or `rows()` on it.
 
 ### Chaining helpers
 
@@ -486,8 +515,9 @@ db.progress_handler(1000, [&] { return !cancelled; }, scope);    // every 1000 V
 
 ### Rows as a range
 
-`statement::rows<T...>()` gives the rows of a query for a range-based `for` loop. Each element is an
-`expected<row<T...>>`: the value for one column, a `std::tuple` for several, or the error.
+`statement::rows<T...>()` gives the rows of a prepared statement for a range-based `for` loop, like
+[`query()`](#queries) does for SQL. Each element is an `expected<row<T...>>`: the value for one column, a
+`std::tuple` for several, or the error.
 
 ```cpp
 for (sql::expected<std::tuple<std::string, int>>& user : select.rows<std::string, int>())

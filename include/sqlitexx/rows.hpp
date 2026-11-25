@@ -33,6 +33,9 @@
 namespace sqlitexx
 {
 template <class... T>
+class results;
+
+template <class... T>
 class rows_range
 {
 public:
@@ -136,7 +139,10 @@ public:
         if (!started)
         {
             started = true;
-            advance();
+            if (!finished)
+            {
+                advance();
+            }
         }
         return iterator(this);
     }
@@ -147,16 +153,25 @@ public:
     }
 
 private:
-    statement* stmt;
+    statement* stmt = nullptr;
     optional<value_type> current;
     bool started = false;
     bool finished = false;
 
     friend class statement;
+    friend class results<T...>;
 
     explicit rows_range(statement& source) noexcept
         : stmt(&source)
     {
+    }
+
+    /// A query that couldn't start: the error is the only element
+    explicit rows_range(error&& failed) noexcept
+        : finished(true)
+    {
+        // Built in place: moving a temporary expected in makes GCC warn about its unused value (-Wmaybe-uninitialized)
+        current.emplace(unexpect, std::move(failed));
     }
 
     void advance()

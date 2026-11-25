@@ -439,7 +439,8 @@ void test_move_only_steps()
     CHECK(none && *none == 7);
 }
 
-// Types that read as a view into the statement can't come out of query_row, whose statement ends first
+// Types that read as a view into the statement: results::first() on a temporary and the first<T>() step on a
+// temporary statement reject them
 static_assert(
     sqlitexx::detail::reads_view<string_view>::value,
     "string_view is a view"
@@ -474,39 +475,48 @@ static_assert(
     "one view among these"
 );
 
-void test_query_row()
+void test_query_first()
 {
     database db = open_users();
 
     // One column gives the value, several a tuple; the arguments bind to parameters 1, 2, ...
-    expected<int> alice = db.query_row<int>("SELECT age FROM user WHERE name = ?", "Alice");
+    expected<int> alice = db.query<int>("SELECT age FROM user WHERE name = ?", "Alice").first();
     CHECK(alice && *alice == 31);
 
     expected<std::tuple<std::string, optional<int>>> bob =
-        db.query_row<std::string, optional<int>>("SELECT name, age FROM user WHERE id = ?", 2);
+        db.query<std::string, optional<int>>("SELECT name, age FROM user WHERE id = ?", 2).first();
     CHECK(bob && std::get<0>(*bob) == "Bob" && !std::get<1>(*bob));
 
     // Without parameters
-    expected<std::int64_t> count = db.query_row<std::int64_t>("SELECT count(*) FROM user");
+    expected<std::int64_t> count = db.query<std::int64_t>("SELECT count(*) FROM user").first();
     CHECK(count && *count == 2);
 
     // No row is a done error, which on() turns into a value
-    expected<int> carol = db.query_row<int>("SELECT age FROM user WHERE name = ?", "Carol");
+    expected<int> carol = db.query<int>("SELECT age FROM user WHERE name = ?", "Carol").first();
     CHECK(!carol && carol.error().primary() == primary_code::done);
     expected<int> fallback_age =
-        db.query_row<int>("SELECT age FROM user WHERE name = ?", "Carol")
+        db.query<int>("SELECT age FROM user WHERE name = ?", "Carol")
+            .first()
             .or_else(sqlitexx::on(primary_code::done, fallback{std::unique_ptr<int>(new int(-1))}));
     CHECK(fallback_age && *fallback_age == -1);
 
     // NULL into a non-optional, SQL that doesn't prepare, too many arguments, two statements
-    expected<int> null_age = db.query_row<int>("SELECT age FROM user WHERE name = ?", "Bob");
+    expected<int> null_age = db.query<int>("SELECT age FROM user WHERE name = ?", "Bob").first();
     CHECK(!null_age && null_age.error().primary() == primary_code::mismatch);
-    expected<int> bad_sql = db.query_row<int>("SELEC 1");
+    expected<int> bad_sql = db.query<int>("SELEC 1").first();
     CHECK(!bad_sql && bad_sql.error().primary() == primary_code::error);
-    expected<int> extra = db.query_row<int>("SELECT ?", 1, 2);
+    expected<int> extra = db.query<int>("SELECT ?", 1, 2).first();
     CHECK(!extra && extra.error().primary() == primary_code::range);
-    expected<int> two = db.query_row<int>("SELECT 1; SELECT 2");
+    expected<int> two = db.query<int>("SELECT 1; SELECT 2").first();
     CHECK(!two && two.error().primary() == primary_code::misuse);
+
+    // On a named results, first() runs the query again each time, and a view stays valid until the next run
+    sqlitexx::results<string_view> names = db.query<string_view>("SELECT name FROM user ORDER BY id");
+    expected<string_view> name = names.first();
+    CHECK(name && *name == "Alice");
+    CHECK(db.execute("UPDATE user SET name = ? WHERE id = ?", "Ann", 1).has_value());
+    expected<string_view> renamed = names.first();
+    CHECK(renamed && *renamed == "Ann");
 }
 
 void test_execute_with_arguments()
@@ -516,7 +526,7 @@ void test_execute_with_arguments()
     CHECK(db.execute("INSERT INTO user(name, age) VALUES(?, ?)", "Carol", 25).has_value());
     CHECK(db.changes() == 1);
     CHECK(db.execute("UPDATE user SET age = ? WHERE name = ?", optional<int>(), std::string("Carol")).has_value());
-    expected<optional<int>> carol = db.query_row<optional<int>>("SELECT age FROM user WHERE name = ?", "Carol");
+    expected<optional<int>> carol = db.query<optional<int>>("SELECT age FROM user WHERE name = ?", "Carol").first();
     CHECK(carol && !*carol);
 
     // Errors from the statement come through; unlike execute(sql), only one statement is allowed
@@ -524,9 +534,35 @@ void test_execute_with_arguments()
     CHECK(!duplicate && duplicate.error().code() == extended_code::constraint_unique);
     expected<void> two = db.execute("DELETE FROM user WHERE id = ?; DELETE FROM user", 1);
     CHECK(!two && two.error().primary() == primary_code::misuse);
-    expected<std::int64_t> count = db.query_row<std::int64_t>("SELECT count(*) FROM user");
+    expected<std::int64_t> count = db.query<std::int64_t>("SELECT count(*) FROM user").first();
     CHECK(count && *count == 3);
 }
+
+void test_prepare_with_arguments()
+{
+    database db = open_users();
+
+    // Bound and ready to step, and runs again with new values
+    expected<statement> select = db.prepare("SELECT name FROM user WHERE age >= ?", 30);
+    CHECK(select.has_value());
+    expected<std::string> name = select->first<std::string>();
+    CHECK(name && *name == "Alice");
+    CHECK(select->reset().has_value());
+    CHECK(select->bind(40).has_value());
+    expected<std::string> none = select->first<std::string>();
+    CHECK(!none && none.error().primary() == primary_code::done);
+
+    // In a chain
+    expected<int> age = db.prepare("SELECT age FROM user WHERE name = ?", "Alice").and_then(sqlitexx::first<int>());
+    CHECK(age && *age == 31);
+
+    // A failed bind is the result's error
+    expected<statement> extra = db.prepare("SELECT ?", 1, 2);
+    CHECK(!extra && extra.error().primary() == primary_code::range);
+    expected<statement> two = db.prepare("SELECT ?; SELECT 2", 1);
+    CHECK(!two && two.error().primary() == primary_code::misuse);
+}
+
 } // anonymous
 
 int main()
@@ -543,8 +579,9 @@ int main()
     test_extended_codes();
     test_columns_by_name();
     test_move_only_steps();
-    test_query_row();
+    test_query_first();
     test_execute_with_arguments();
+    test_prepare_with_arguments();
 
     return test::summary();
 }

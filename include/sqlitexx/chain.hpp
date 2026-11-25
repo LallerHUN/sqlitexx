@@ -19,6 +19,7 @@
 /// so a step never refers to anything outside itself. Passing an lvalue copies it where the call is made, in the
 /// caller's code; the calls themselves only move, and are noexcept when moving cannot throw.
 
+#include "sqlitexx/detail/reads_view.hpp"
 #include "sqlitexx/detail/utility.hpp"
 #include "sqlitexx/error.hpp"
 #include "sqlitexx/expected.hpp"
@@ -73,6 +74,7 @@ namespace detail
 
         expected<row<T...>> operator()(statement&& stmt) const
         {
+            static_assert(!detail::any_reads_view<T...>::value, SQLITEXX_DETAIL_VIEW_WOULD_DANGLE);
             return stmt.first<T...>();
         }
     };

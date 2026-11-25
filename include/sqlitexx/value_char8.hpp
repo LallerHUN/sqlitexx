@@ -98,7 +98,7 @@ struct value_traits<std::u8string>
 template <>
 struct value_traits<std::u8string_view>
 {
-    /// Reading gives a view into SQLite's memory (see database::query_row)
+    /// Reading gives a view into SQLite's memory (see sqlitexx/results.hpp)
     static constexpr bool reads_view = true;
 
     template <class Target>
@@ -130,7 +130,7 @@ struct value_traits<std::u8string_view>
 template <>
 struct value_traits<u8cstring_view>
 {
-    /// Reading gives a view into SQLite's memory (see database::query_row)
+    /// Reading gives a view into SQLite's memory (see sqlitexx/results.hpp)
     static constexpr bool reads_view = true;
 
     template <class Target>

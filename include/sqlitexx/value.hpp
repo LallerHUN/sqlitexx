@@ -28,8 +28,8 @@
 /// SQLite.
 ///
 /// A type whose read() gives a view into SQLite's memory, valid only until the next step, says so with
-/// `static constexpr bool reads_view = true;` in its traits, as string_view's do. database::query_row(), whose
-/// statement ends before it returns, then rejects it at compile time.
+/// `static constexpr bool reads_view = true;` in its traits, as string_view's do. Calls whose statement ends
+/// before the row is returned (results::first() on a temporary) then reject it at compile time.
 ///
 /// Traits written for native::statement, as above, work for statements. To work for SQL functions too (arguments and
 /// results, see sqlitexx/function.hpp), make bind() and read() templates over the statement type, as the built-in
@@ -339,7 +339,7 @@ struct value_traits<std::string>
 template <>
 struct value_traits<string_view>
 {
-    /// Reading gives a view into SQLite's memory (see database::query_row)
+    /// Reading gives a view into SQLite's memory (see sqlitexx/results.hpp)
     static constexpr bool reads_view = true;
 
     template <class Target>
@@ -371,7 +371,7 @@ struct value_traits<string_view>
 template <>
 struct value_traits<cstring_view>
 {
-    /// Reading gives a view into SQLite's memory (see database::query_row)
+    /// Reading gives a view into SQLite's memory (see sqlitexx/results.hpp)
     static constexpr bool reads_view = true;
 
     template <class Target>
