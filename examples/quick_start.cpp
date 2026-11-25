@@ -53,10 +53,8 @@ int main()
                 )
             );
 
-    // Chain the steps, and turn one kind of error into a value: no such user gives -1
-    sql::expected<int> carol = db.prepare("SELECT age FROM user WHERE name = ?")
-                                   .and_then(sql::bind_values("Carol"))
-                                   .and_then(sql::first<int>())
+    // One row in one line, and one kind of error turned into a value: no such user gives -1
+    sql::expected<int> carol = db.query_row<int>("SELECT age FROM user WHERE name = ?", "Carol")
                                    .or_else(
                                        sql::on(
                                            sql::native::primary_code::done,

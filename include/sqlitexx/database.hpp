@@ -6,6 +6,8 @@
 #include "sqlitexx/config.hpp"
 #include "sqlitexx/cstring_view.hpp"
 #include "sqlitexx/detail/hook_slots.hpp"
+#include "sqlitexx/detail/noexcept_traits.hpp"
+#include "sqlitexx/detail/reads_view.hpp"
 #include "sqlitexx/error.hpp"
 #include "sqlitexx/expected.hpp"
 #include "sqlitexx/native/connection.hpp"
@@ -43,12 +45,72 @@ public:
     ///@}
 
     /// \name Statements
-    /// execute() runs one or more semicolon-separated statements and discards their rows. prepare()
+    /// execute(sql) runs one or more semicolon-separated statements and discards their rows. prepare()
     /// takes exactly one statement: SQL holding none, or several, is a primary_code::misuse error rather than
     /// silently ignoring the rest.
+    ///
+    /// query_row() and execute(sql, args...) are one-liners: they prepare one statement, bind `args` to parameters
+    /// 1, 2, 3, ..., run it and finalize it. Each call prepares the SQL again; to run the same SQL many times, prepare
+    /// it once and use statement::execute() and statement::first().
     ///@{
     SQLITEXX_DETAIL_NODISCARD expected<void> execute(const char* sql) noexcept;
     SQLITEXX_DETAIL_NODISCARD expected<statement> prepare(string_view sql) noexcept;
+
+    /// Runs one statement with its parameters bound to `args` and discards its rows: INSERT, UPDATE, DELETE.
+    /// Unlike execute(sql), SQL holding several statements is a primary_code::misuse error.
+    template <
+        class First,
+        class... Rest>
+    SQLITEXX_DETAIL_NODISCARD expected<void> execute(
+        string_view sql,
+        const First& first,
+        const Rest&... rest
+    ) noexcept(detail::
+                   all_bind_noexcept<
+                       First,
+                       Rest...>::value)
+    {
+        expected<statement> prepared = prepare(sql);
+        if (!prepared)
+        {
+            return expected<void>(unexpect, std::move(prepared.error()));
+        }
+        return prepared->execute(first, rest...);
+    }
+
+    /// Runs one statement with its parameters bound to `args` and reads its first row: one column gives the value,
+    /// several a std::tuple. A query that produces no row gives a primary_code::done error, like statement::first().
+    ///
+    ///     expected<int> age = db.query_row<int>("SELECT age FROM user WHERE name = ?", "Carol");
+    ///
+    /// The statement is finalized before the row is returned, so types that read as a view into SQLite's memory
+    /// (string_view, cstring_view, std::span) don't compile here: read std::string or a blob instead.
+    template <
+        class... T,
+        class... Args>
+    SQLITEXX_DETAIL_NODISCARD expected<row<T...>> query_row(
+        string_view sql,
+        const Args&... args
+    ) noexcept(detail::all_bind_noexcept<Args...>::value && detail::row_reads_noexcept<T...>::value)
+    {
+        static_assert(sizeof...(T) > 0, "query_row<T...>: name the type of each column to read");
+        static_assert(
+            !detail::any_reads_view<T...>::value,
+            "query_row<T...>: the statement ends before the row is returned, so a view into it would dangle; "
+            "read std::string or a blob instead of string_view, cstring_view or std::span"
+        );
+        expected<statement> prepared = prepare(sql);
+        if (!prepared)
+        {
+            return expected<row<T...>>(unexpect, std::move(prepared.error()));
+        }
+        expected<void> bound = prepared->bind(args...);
+        if (!bound)
+        {
+            return expected<row<T...>>(unexpect, std::move(bound.error()));
+        }
+        return prepared->first<T...>();
+    }
     ///@}
 
     /// \name State

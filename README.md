@@ -68,10 +68,8 @@ int main()
                 )
             );
 
-    // Chain the steps, and turn one kind of error into a value: no such user gives -1
-    sql::expected<int> carol = db.prepare("SELECT age FROM user WHERE name = ?")
-                                   .and_then(sql::bind_values("Carol"))
-                                   .and_then(sql::first<int>())
+    // One row in one line, and one kind of error turned into a value: no such user gives -1
+    sql::expected<int> carol = db.query_row<int>("SELECT age FROM user WHERE name = ?", "Carol")
                                    .or_else(
                                        sql::on(
                                            sql::native::primary_code::done,
@@ -204,10 +202,10 @@ meant, say so: `static_cast<void>(db.execute("DELETE FROM t"));`. The chaining h
 
 | Primary code | Meaning in sqlitexx |
 |---|---|
-| `done` | `first()` found no row |
+| `done` | `first()` or `query_row()` found no row |
 | `mismatch` | NULL read into a non-optional type, or an integer that doesn't fit |
 | `nomem` | Out of memory, in SQLite or in sqlitexx (see [Out of memory](#out-of-memory)) |
-| `misuse` | `prepare()` was given no SQL statement, or more than one |
+| `misuse` | `prepare()`, `query_row()` or `execute(sql, args...)` was given no SQL statement, or more than one |
 
 `sqlitexx::on(code, handler)` handles one kind of error inside `or_else` and passes every other error on unchanged.
 `code` is either of these:
@@ -221,8 +219,7 @@ The extended codes are named after `sqlite3.h` without the prefix (`SQLITE_CONST
 `on()` also takes the number as an `int`.
 
 ```cpp
-auto added = db.prepare("INSERT INTO user(name) VALUES(?)")
-                 .and_then(sql::execute_with("Alice"))
+auto added = db.execute("INSERT INTO user(name) VALUES(?)", "Alice")
                  .transform([] { return true; })
                  .or_else(sql::on(sql::native::extended_code::constraint_unique, [](const sql::error&) {
                      return sql::expected<bool>(false); // already there
@@ -260,6 +257,30 @@ Without exceptions, a failed allocation ends the program, as it does in the stan
 memory is a `nomem` error either way. With MSVC's iterator debugging (its Debug builds), the standard library gives
 every `std::string` a proxy object on the heap, even an empty one, and ends the program itself when that fails; the
 guarantee holds in release builds.
+
+### One-liners
+
+For SQL you run once, `query_row` and `execute` with arguments prepare the statement, bind the arguments to
+parameters 1, 2, 3, ..., run it and finalize it in one call:
+
+```cpp
+sql::expected<int> age = db.query_row<int>("SELECT age FROM user WHERE name = ?", "Alice");
+
+sql::expected<std::tuple<std::string, sql::optional<int>>> user =
+    db.query_row<std::string, sql::optional<int>>("SELECT name, age FROM user WHERE id = ?", 7);
+
+sql::expected<void> added = db.execute("INSERT INTO user(name, age) VALUES(?, ?)", "Dee", 41);
+```
+
+- `query_row<T...>` reads the first row: one column gives the value, several a `std::tuple`. No row is a `done`
+  error, as with `first()`, so `on(native::primary_code::done, ...)` turns it into a value.
+- The statement is gone by the time the row comes back, so types that read as a view into it (`string_view`,
+  `cstring_view`, `std::span`) don't compile with `query_row`: read a `std::string` or a blob. Your own
+  `value_traits` say they read a view with `static constexpr bool reads_view = true;`.
+- `execute(sql)` without arguments runs a script of several statements; with arguments, SQL holding more than one
+  statement is a `misuse` error, as with `prepare()`.
+- Each call prepares the SQL again. For SQL you run many times, prepare it once and call `statement::execute(args...)`
+  or `first()` on it.
 
 ### Chaining helpers
 

@@ -98,6 +98,9 @@ struct value_traits<std::u8string>
 template <>
 struct value_traits<std::u8string_view>
 {
+    /// Reading gives a view into SQLite's memory (see database::query_row)
+    static constexpr bool reads_view = true;
+
     template <class Target>
     static native::result bind(
         Target& stmt,
@@ -127,6 +130,9 @@ struct value_traits<std::u8string_view>
 template <>
 struct value_traits<u8cstring_view>
 {
+    /// Reading gives a view into SQLite's memory (see database::query_row)
+    static constexpr bool reads_view = true;
+
     template <class Target>
     static native::result bind(
         Target& stmt,
