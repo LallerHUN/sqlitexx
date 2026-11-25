@@ -6,6 +6,12 @@
 // with the right results or with a nomem error; an exception escaping, or a noexcept call ending the program, fails
 // the test. SQLite allocates with malloc, so only the C++ side runs out.
 
+// The replaced operator new and delete are malloc and free on purpose. Once GCC inlines them into their callers, it
+// takes new paired with free for a mismatch.
+#if defined(__GNUC__) && !defined(__clang__) && __GNUC__ >= 11
+#pragma GCC diagnostic ignored "-Wmismatched-new-delete"
+#endif
+
 #include "check.hpp"
 #include "sqlitexx/sqlitexx.hpp"
 
@@ -155,6 +161,15 @@ struct backwards_named
     }
 };
 
+// A commit hook: lets every commit through
+struct yes_hook
+{
+    bool operator()() const
+    {
+        return true;
+    }
+};
+
 // Never called: the checks are in unevaluated operands. A string_view comes in ready made: noexcept(...) includes
 // converting arguments, and string-view-lite does not mark its constructors noexcept for every compiler.
 inline void noexcept_checks(
@@ -207,6 +222,9 @@ inline void noexcept_checks(
     SQLITEXX_TEST_NOEXCEPT(db.create_collation("c", backwards(), std::declval<sqlitexx::registrations&>()));
     SQLITEXX_TEST_NOEXCEPT(std::declval<sqlitexx::registrations&>().remove());
     SQLITEXX_TEST_NOEXCEPT(std::declval<sqlitexx::registrations&>().release());
+    SQLITEXX_TEST_NOEXCEPT(db.commit_hook(yes_hook()));
+    SQLITEXX_TEST_NOEXCEPT(db.progress_handler(100, yes_hook(), std::declval<sqlitexx::registrations&>()));
+    SQLITEXX_TEST_NOEXCEPT(db.update_hook(nullptr));
     SQLITEXX_TEST_NOEXCEPT(sqlitexx::execute_with("Alice", 42));
     SQLITEXX_TEST_NOEXCEPT(sqlitexx::execute_with(std::string()));
     SQLITEXX_TEST_NOT_NOEXCEPT(sqlitexx::execute_with(name));
@@ -652,6 +670,11 @@ outcome functions(const inputs& in)
     sqlitexx::registrations scope;
     if (failed(db->create_function("scoped_greet", in.greet, scope), out)
         || failed(db->create_collation("scoped_backwards", backwards(), scope), out) || failed(scope.remove(), out))
+    {
+        return out;
+    }
+    // Hooks allocate their control block, and the database its hook slots on the first one
+    if (failed(db->commit_hook(yes_hook()), out) || failed(db->progress_handler(1000, yes_hook(), scope), out))
     {
         return out;
     }

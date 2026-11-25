@@ -1,10 +1,10 @@
 #ifndef SQLITEXX_DETAIL_REGISTRATION_BLOCK_HPP
 #define SQLITEXX_DETAIL_REGISTRATION_BLOCK_HPP
 
-// The control block of a function, aggregate or collation registered with a registrations token: what SQLite gets as
-// user_data, holding the callable, shared by SQLite and the token. Either side may let go first: SQLite when the
-// registration is replaced, removed or the database closes, the token when it removes, releases or ends. The block
-// goes when both have let go.
+// The control block of a function, aggregate or collation registered with a registrations token, and of every hook:
+// what SQLite gets as user_data, holding the callable, shared by SQLite and the token. Either side may let go first:
+// SQLite when the registration is replaced, removed or the database closes, the token when it removes, releases or
+// ends. The block goes when both have let go. For hooks, SQLite owns nothing: the database's hook_slots take its side.
 //
 // The callable ends when SQLite lets go. When the token ends without having removed the registration (a statement was
 // running), it ends the callable itself: callable() is null from then on, and what SQLite calls fails (functions) or
@@ -31,6 +31,8 @@ class registrations;
 
 namespace detail
 {
+    class hook_slots;
+
     class registration_block
     {
     public:
@@ -38,20 +40,26 @@ namespace detail
         {
             function,
             collation,
+            commit_hook,
+            rollback_hook,
+            update_hook,
+            progress_handler,
         };
 
         registration_block(const registration_block&) = delete;
         registration_block& operator=(const registration_block&) = delete;
 
-        // SQLite's destroy callback: SQLite no longer refers to the block
+        // SQLite's destroy callback: SQLite no longer refers to the block. For hooks, the hook_slots call it.
         static void released_by_sqlite(void* block) noexcept;
 
     protected:
+        // `slots` for hooks, null for functions and collations
         registration_block(
             sqlite3* connection,
             std::unique_ptr<char[]> registered_name,
             int arguments,
-            kind registered
+            kind registered,
+            hook_slots* slots
         ) noexcept;
 
         virtual ~registration_block();
@@ -68,6 +76,7 @@ namespace detail
         std::unique_ptr<char[]> name;
         int argument_count;
         kind what;
+        hook_slots* hooks;
         bool held_by_sqlite = true;
         bool held_by_token = false;
         registration_block* next = nullptr;
@@ -99,7 +108,19 @@ namespace detail
                 return nullptr;
             }
             return new (std::nothrow)
-                scoped_callable(connection, std::move(copied), arguments, registered, std::move(callable));
+                scoped_callable(connection, std::move(copied), arguments, registered, nullptr, std::move(callable));
+        }
+
+        // A hook's block: no name, kept by the database's hook_slots. Null when out of memory.
+        static scoped_callable* make_hook(
+            sqlite3* connection,
+            hook_slots* slots,
+            kind registered,
+            F&& callable
+        ) noexcept(std::is_nothrow_move_constructible<F>::value)
+        {
+            return new (std::nothrow)
+                scoped_callable(connection, std::unique_ptr<char[]>(), 0, registered, slots, std::move(callable));
         }
 
         // What SQLite gets as user_data: the block, as the registration_block that released_by_sqlite expects
@@ -123,13 +144,15 @@ namespace detail
             std::unique_ptr<char[]> registered_name,
             int arguments,
             kind registered,
+            hook_slots* slots,
             F&& callable
         )
             : registration_block(
                   connection,
                   std::move(registered_name),
                   arguments,
-                  registered
+                  registered,
+                  slots
               ),
               object(new (static_cast<void*>(storage)) F(std::move(callable)))
         {

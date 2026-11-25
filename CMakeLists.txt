@@ -257,6 +257,7 @@ add_library(sqlitexx STATIC
     src/backup.cpp
     src/blob_stream.cpp
     src/database.cpp
+    src/hook_slots.cpp
     src/native/backup.cpp
     src/native/blob_handle.cpp
     src/native/connection.cpp

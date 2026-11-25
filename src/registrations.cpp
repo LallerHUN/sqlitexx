@@ -13,12 +13,14 @@ namespace detail
         sqlite3* connection,
         std::unique_ptr<char[]> registered_name,
         int arguments,
-        kind registered
+        kind registered,
+        hook_slots* slots
     ) noexcept
         : handle(connection),
           name(std::move(registered_name)),
           argument_count(arguments),
-          what(registered)
+          what(registered),
+          hooks(slots)
     {
     }
 
@@ -50,6 +52,12 @@ namespace detail
     {
         if (!held_by_sqlite)
         {
+            return native::result(SQLITE_OK);
+        }
+        // A hook is cleared through the database's slots, which release the block. Clearing never fails.
+        if (hooks != nullptr)
+        {
+            hooks->clear(what, this);
             return native::result(SQLITE_OK);
         }
         // Without callbacks, SQLite removes what is registered under the name (and count), and releases the block

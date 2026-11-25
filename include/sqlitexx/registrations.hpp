@@ -1,8 +1,8 @@
 #ifndef SQLITEXX_REGISTRATIONS_HPP
 #define SQLITEXX_REGISTRATIONS_HPP
 
-// A token that removes SQL functions, aggregates and collations when it ends, so they can refer to state outside
-// them that ends before the database does:
+// A token that removes SQL functions, aggregates and collations, and clears hooks, when it ends, so they can refer
+// to state outside them that ends before the database does:
 //
 //     sort_settings settings;
 //     sqlitexx::registrations scope;   // after the state: it ends first
@@ -15,8 +15,11 @@
 //  - The destructor removes what the token holds, the latest first. remove() does the same now and returns the first
 //    error; what it couldn't remove stays in the token.
 //  - release() keeps the registrations and forgets them: they stay until replaced, removed or the database closes.
-//  - What is gone already needs nothing: replaced by registering the same name again, removed with remove_function
-//    or remove_collation, or released because the database closed. The token may outlive the database.
+//  - What is gone already needs nothing: replaced by registering the same name (or setting the same kind of hook)
+//    again, removed with remove_function or remove_collation, a hook cleared with nullptr, or released because the
+//    database closed. The token may outlive the database.
+//  - Hooks (sqlitexx/hooks.hpp) can always be cleared, also while statements run: what follows is about functions,
+//    aggregates and collations only.
 //
 // Removing fails with primary_code::busy while a statement on the connection is running (it returned a row and was
 // not reset or finished), any statement, not only those using the name. Declaring statements after the token ends

@@ -6,6 +6,7 @@ foreach(test_name
     collation_test
     cstring_view_test
     function_test
+    hooks_test
     native_test
     newer_types_test
     out_of_memory_test

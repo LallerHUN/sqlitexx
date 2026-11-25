@@ -399,7 +399,8 @@ db.create_function("set_descending", [&settings](bool descending) { settings.des
 // the end of the scope removes both, then settings ends
 ```
 
-- Every `create_function`, `create_aggregate` and `create_collation` takes a token as its last parameter.
+- Every `create_function`, `create_aggregate` and `create_collation` takes a token as its last parameter, and so does
+  every [hook](#hooks).
 - `scope.remove()` removes now and returns the first error; `scope.release()` keeps the registrations and forgets them.
 - What is gone already needs nothing: replaced, removed by name, or released because the database closed. The token
   may outlive the database, and may hold registrations of several databases.
@@ -424,6 +425,36 @@ db.remove_function("set_descending", 1);   // a function is known by its name an
 
 For state that should simply live as long as SQLite needs it, capture a `std::shared_ptr` instead: no token or
 removing needed.
+
+### Hooks
+
+Hooks run C++ code when transactions commit or roll back, when rows change, and while statements run:
+
+```cpp
+std::vector<std::int64_t> changed;
+std::atomic<bool> cancelled{false};   // set from another thread to cancel
+sql::registrations scope;
+
+db.update_hook([&changed](sql::native::update_kind kind, sql::cstring_view schema, sql::cstring_view table,
+                          std::int64_t rowid) { changed.push_back(rowid); }, scope);
+db.commit_hook([&] { return changed.size() < 1000; }, scope);   // false turns the commit into a rollback
+db.rollback_hook([&] { changed.clear(); }, scope);
+db.progress_handler(1000, [&] { return !cancelled; }, scope);    // every 1000 VM instructions; false interrupts
+```
+
+- `commit_hook`: before every commit, also the automatic one around a single statement. It returns `void`, or a
+  `bool`: false turns the commit into a rollback, and the statement fails with `extended_code::constraint_commithook`.
+- `rollback_hook`: after a rollback, by `ROLLBACK` or by an error.
+- `update_hook`: for every row inserted, updated or deleted in a rowid table, with the kind of change
+  (`update_kind::insert`, `update` or `remove`), the schema, the table and the rowid.
+- `progress_handler(instructions, handler)`: while a statement runs; false interrupts it, and it fails with
+  `interrupt`. Useful for cancelling long queries.
+- A connection has one hook of each kind. Setting one replaces the one before, and `nullptr` clears it:
+  `db.commit_hook(nullptr)`. With a `registrations` token, it is cleared when the token ends; that always works, also
+  while statements run.
+- A hook must not change the connection running it: no statements on it from inside a hook.
+- Hooks can't report errors. With exceptions enabled, an exception from a commit hook rolls back and one from a
+  progress handler interrupts; one from an update or rollback hook ends the program (`std::terminate`).
 
 ### Rows as a range
 

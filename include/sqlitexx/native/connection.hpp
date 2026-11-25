@@ -5,6 +5,7 @@
 #include "sqlitexx/native/collation_callback.hpp"
 #include "sqlitexx/native/flags.hpp"
 #include "sqlitexx/native/function_callbacks.hpp"
+#include "sqlitexx/native/hook_callbacks.hpp"
 #include "sqlitexx/native/result.hpp"
 #include "sqlitexx/native/statement.hpp"
 
@@ -119,6 +120,29 @@ namespace native
             void* user_data,
             compare_callback compare,
             destroy_callback destroy
+        ) noexcept;
+
+        // Hooks: one of each per connection, each call replacing the one before. A null callback clears the hook.
+        // SQLite keeps `user_data` without owning it (there is no destroy callback); commit_hook, rollback_hook and
+        // update_hook return the previous one. A hook must not modify the connection that runs it, nor prepare or run
+        // statements on it. The progress handler runs every `instructions` virtual machine instructions of a statement
+        // (less than 1 turns it off).
+        void* commit_hook(
+            commit_callback hook,
+            void* user_data
+        ) noexcept;
+        void* rollback_hook(
+            rollback_callback hook,
+            void* user_data
+        ) noexcept;
+        void* update_hook(
+            update_callback hook,
+            void* user_data
+        ) noexcept;
+        void progress_handler(
+            int instructions,
+            progress_callback handler,
+            void* user_data
         ) noexcept;
 
         // Errors of the most recent failed call on this connection
