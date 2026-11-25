@@ -14,7 +14,7 @@ extern "C"
 
 namespace sqlitexx
 {
-// How BEGIN takes its locks (see https://sqlite.org/lang_transaction.html).
+/// How BEGIN takes its locks (see https://sqlite.org/lang_transaction.html).
 enum class transaction_mode
 {
     // Locks are taken by the first read or write
@@ -25,15 +25,15 @@ enum class transaction_mode
     exclusive,
 };
 
-// A transaction that rolls back unless it is committed. Move-only.
-//
-//     expected<transaction> tx = transaction::begin(db);
-//     ... statements ...
-//     expected<void> committed = tx->commit();   // leaving the scope without commit() rolls back
-//
-// It must not outlive its database. When commit() fails, the transaction can still be open (a deferred constraint
-// failed, or SQLITE_BUSY) or already rolled back by SQLite (for example after SQLITE_FULL); active() tells which, and
-// an open transaction can be retried or rolled back.
+/// A transaction that rolls back unless it is committed. Move-only.
+///
+///     expected<transaction> tx = transaction::begin(db);
+///     ... statements ...
+///     expected<void> committed = tx->commit();   // leaving the scope without commit() rolls back
+///
+/// It must not outlive its database. When commit() fails, the transaction can still be open (a deferred constraint
+/// failed, or SQLITE_BUSY) or already rolled back by SQLite (for example after SQLITE_FULL); active() tells which, and
+/// an open transaction can be retried or rolled back.
 class transaction final
 {
 public:
@@ -47,7 +47,8 @@ public:
 
     ~transaction();
 
-    // Lifetime
+    /// \name Lifetime
+    ///@{
     SQLITEXX_DETAIL_NODISCARD static expected<transaction> begin(
         database& target,
         transaction_mode mode = transaction_mode::deferred
@@ -55,8 +56,9 @@ public:
 
     SQLITEXX_DETAIL_NODISCARD expected<void> commit() noexcept;
     SQLITEXX_DETAIL_NODISCARD expected<void> rollback() noexcept;
+    ///@}
 
-    // True until commit() or rollback() ends the transaction, or SQLite rolls it back itself
+    /// True until commit() or rollback() ends the transaction, or SQLite rolls it back itself
     bool active() const noexcept;
 
 private:
@@ -68,14 +70,14 @@ private:
     void rollback_if_open() noexcept;
 };
 
-// Runs `body` in a transaction: commits when it returns a value, rolls back when it returns an error. Gives back the
-// body's result, or the error of BEGIN or COMMIT. `body` takes no arguments and returns an expected<T>.
-//
-//     expected<std::int64_t> id = sqlitexx::in_transaction(db, [&] {
-//         return db.prepare("INSERT INTO user(name) VALUES(?)")
-//             .and_then(sqlitexx::execute_with("Alice"))
-//             .transform([&] { return db.last_insert_rowid(); });
-//     });
+/// Runs `body` in a transaction: commits when it returns a value, rolls back when it returns an error. Gives back the
+/// body's result, or the error of BEGIN or COMMIT. `body` takes no arguments and returns an expected<T>.
+///
+///     expected<std::int64_t> id = sqlitexx::in_transaction(db, [&] {
+///         return db.prepare("INSERT INTO user(name) VALUES(?)")
+///             .and_then(sqlitexx::execute_with("Alice"))
+///             .transform([&] { return db.last_insert_rowid(); });
+///     });
 template <class F>
 SQLITEXX_DETAIL_NODISCARD auto in_transaction(
     database& db,

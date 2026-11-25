@@ -1,0 +1,60 @@
+# Doxygen configuration for the sqlitexx reference. Build it with tools/docs.sh, which fetches the doxygen-awesome-css
+# theme into build/docs/theme and sets PROJECT_NUMBER from CMakeLists.txt. The output goes to build/docs/html.
+
+PROJECT_NAME           = sqlitexx
+PROJECT_BRIEF          = "C++ wrapper for SQLite: errors as expected<T, error>, no exceptions, two layers"
+OUTPUT_DIRECTORY       = ../build/docs
+CREATE_SUBDIRS         = NO
+
+# What to read: the public headers and the README as the main page. detail/ is the implementation.
+INPUT                  = ../README.md ../CONTRIBUTING.md ../CHANGELOG.md ../include/sqlitexx
+FILE_PATTERNS          = *.hpp *.md
+RECURSIVE              = YES
+EXCLUDE                = ../include/sqlitexx/detail
+EXCLUDE_SYMBOLS        = detail detail::* sqlitexx::detail sqlitexx::detail::*
+USE_MDFILE_AS_MAINPAGE = ../README.md
+STRIP_FROM_PATH        = ../include
+STRIP_FROM_INC_PATH    = ../include
+
+# Comments: /// blocks, the first sentence is the brief
+JAVADOC_AUTOBRIEF      = YES
+MARKDOWN_SUPPORT       = YES
+MARKDOWN_ID_STYLE      = GITHUB
+AUTOLINK_SUPPORT       = YES
+EXTRACT_ALL            = YES
+EXTRACT_PRIVATE        = NO
+EXTRACT_STATIC         = YES
+HIDE_UNDOC_MEMBERS     = NO
+SORT_MEMBER_DOCS       = NO
+INLINE_INHERITED_MEMB  = NO
+SHOW_INCLUDE_FILES     = YES
+
+# The macros as a C++23 build with the standard types sees them
+ENABLE_PREPROCESSING   = YES
+MACRO_EXPANSION        = YES
+EXPAND_ONLY_PREDEF     = YES
+PREDEFINED             = SQLITEXX_DETAIL_NODISCARD=[[nodiscard]] \
+                         SQLITEXX_USE_STD_CXX17_TYPES=1 \
+                         SQLITEXX_USE_STD_EXPECTED=1 \
+                         SQLITEXX_CPLUSPLUS=202302L \
+                         SQLITEXX_DETAIL_EXCEPTIONS=1
+EXPAND_AS_DEFINED      = SQLITEXX_DETAIL_NODISCARD
+
+# HTML only, with the doxygen-awesome theme
+GENERATE_HTML          = YES
+GENERATE_LATEX         = NO
+GENERATE_TREEVIEW      = YES
+DISABLE_INDEX          = NO
+FULL_SIDEBAR           = NO
+HTML_COLORSTYLE        = LIGHT
+HTML_EXTRA_STYLESHEET  = ../build/docs/theme/doxygen-awesome.css \
+                         ../build/docs/theme/doxygen-awesome-sidebar-only.css
+SEARCHENGINE           = YES
+HAVE_DOT               = NO
+SOURCE_BROWSER         = NO
+VERBATIM_HEADERS       = NO
+GENERATE_TODOLIST      = NO
+
+QUIET                  = YES
+WARN_IF_UNDOCUMENTED   = NO
+WARN_AS_ERROR          = FAIL_ON_WARNINGS

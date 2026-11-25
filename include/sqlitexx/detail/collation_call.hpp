@@ -1,8 +1,9 @@
 #ifndef SQLITEXX_DETAIL_COLLATION_CALL_HPP
 #define SQLITEXX_DETAIL_COLLATION_CALL_HPP
 
-// What SQLite calls for a collation made from a C++ callable: it hands the callable both texts as string_views and
-// turns what it returns into the negative, zero or positive int SQLite expects.
+/// \file
+/// What SQLite calls for a collation made from a C++ callable: it hands the callable both texts as string_views and
+/// turns what it returns into the negative, zero or positive int SQLite expects.
 
 #include "sqlitexx/config.hpp"
 #include "sqlitexx/detail/registration_block.hpp"
@@ -23,9 +24,9 @@ namespace sqlitexx
 {
 namespace detail
 {
-    // What a comparison may return: a signed integer, negative, zero or positive like std::string::compare, or (C++20)
-    // std::strong_ordering or std::weak_ordering, as operator<=> gives. bool is no comparison: a less-than predicate
-    // can't say "equal".
+    /// What a comparison may return: a signed integer, negative, zero or positive like std::string::compare, or (C++20)
+    /// std::strong_ordering or std::weak_ordering, as operator<=> gives. bool is no comparison: a less-than predicate
+    /// can't say "equal".
     template <class R, class = void>
     struct collation_order
     {
@@ -59,7 +60,7 @@ namespace detail
     };
 #endif
 
-    // The result of calling F with two string_views; no `type` when it can't be called that way
+    /// The result of calling F with two string_views; no `type` when it can't be called that way
     template <class F, class = void>
     struct collation_result
     {
@@ -86,16 +87,16 @@ namespace detail
     {
     };
 
-    // Storage: how user_data holds the callable (owned_by_sqlite, or shared_with_token through a registrations token)
+    /// Storage: how user_data holds the callable (owned_by_sqlite, or shared_with_token through a registrations token)
     template <class F, class Storage = owned_by_sqlite<F>>
     class collation_caller
     {
     public:
         using order = collation_order<typename collation_result<F>::type>;
 
-        // noexcept: SQLite can't take an error from a comparison, and nothing may unwind through it, so an exception
-        // from the callable ends the program. So does a comparison after the registrations token ended the callable:
-        // comparing any other way could corrupt an index.
+        /// noexcept: SQLite can't take an error from a comparison, and nothing may unwind through it, so an exception
+        /// from the callable ends the program. So does a comparison after the registrations token ended the callable:
+        /// comparing any other way could corrupt an index.
         static int compare(
             void* stored,
             int first_size,

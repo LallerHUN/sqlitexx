@@ -1,10 +1,11 @@
 #ifndef SQLITEXX_DETAIL_HOOK_SLOTS_HPP
 #define SQLITEXX_DETAIL_HOOK_SLOTS_HPP
 
-// The hooks of one database: SQLite keeps one of each kind per connection without owning it, so the database keeps
-// the control blocks here, on the heap so that their address survives moving the database. Installing a hook
-// releases the one it replaces; clearing releases it too, and the destructor clears them all from SQLite before
-// releasing them, while the connection is still open.
+/// \file
+/// The hooks of one database: SQLite keeps one of each kind per connection without owning it, so the database keeps
+/// the control blocks here, on the heap so that their address survives moving the database. Installing a hook
+/// releases the one it replaces; clearing releases it too, and the destructor clears them all from SQLite before
+/// releasing them, while the connection is still open.
 
 #include "sqlitexx/detail/registration_block.hpp"
 #include "sqlitexx/native/hook_callbacks.hpp"
@@ -28,7 +29,7 @@ namespace detail
 
         ~hook_slots();
 
-        // Installing: `block` (with its callable) and `hook` take the place of what was there, which is released
+        /// Installing: `block` (with its callable) and `hook` take the place of what was there, which is released
         void install_commit(
             registration_block* block,
             native::commit_callback hook
@@ -47,7 +48,7 @@ namespace detail
             native::progress_callback handler
         ) noexcept;
 
-        // Clearing the hook of a kind, and releasing its block. With `only`, only when that block is installed.
+        /// Clearing the hook of a kind, and releasing its block. With `only`, only when that block is installed.
         void clear(
             registration_block::kind which,
             const registration_block* only = nullptr
@@ -62,7 +63,7 @@ namespace detail
 
         registration_block*& slot(registration_block::kind which) noexcept;
 
-        // Puts `block` in the slot of its kind and releases what was there
+        /// Puts `block` in the slot of its kind and releases what was there
         void replace(
             registration_block::kind which,
             registration_block* block

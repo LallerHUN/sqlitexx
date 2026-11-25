@@ -1,8 +1,9 @@
 #ifndef SQLITEXX_DETAIL_FUNCTION_VALUES_HPP
 #define SQLITEXX_DETAIL_FUNCTION_VALUES_HPP
 
-// SQL function arguments and results seen through the members value_traits use on a native::statement, so every
-// value_traits whose bind() and read() are templates works for SQL functions too.
+/// \file
+/// SQL function arguments and results seen through the members value_traits use on a native::statement, so every
+/// value_traits whose bind() and read() are templates works for SQL functions too.
 
 #include "sqlitexx/config.hpp"
 #include "sqlitexx/cstring_view.hpp"
@@ -19,7 +20,7 @@ namespace sqlitexx
 {
 namespace detail
 {
-    // The arguments of one call, read like the columns of a row (index counts from 0)
+    /// The arguments of one call, read like the columns of a row (index counts from 0)
     class argument_source
     {
     public:
@@ -77,7 +78,7 @@ namespace detail
         }
     };
 
-    // Error messages count arguments from 1, as SQL does
+    /// Error messages count arguments from 1, as SQL does
     inline std::string value_name(
         const argument_source&,
         int index
@@ -86,8 +87,8 @@ namespace detail
         return "argument " + std::to_string(index + 1);
     }
 
-    // The result of one call, written like a statement parameter. The index is ignored, and text and blobs are always
-    // copied: what the function returned is gone once it has returned.
+    /// The result of one call, written like a statement parameter. The index is ignored, and text and blobs are always
+    /// copied: what the function returned is gone once it has returned.
     class result_target
     {
     public:

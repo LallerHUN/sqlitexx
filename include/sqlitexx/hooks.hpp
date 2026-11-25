@@ -1,35 +1,36 @@
 #ifndef SQLITEXX_HOOKS_HPP
 #define SQLITEXX_HOOKS_HPP
 
-// Hooks: C++ callables SQLite runs when transactions commit or roll back, when rows change, and while statements run.
-//
-//     db.update_hook([&](sqlitexx::native::update_kind kind, sqlitexx::cstring_view schema,
-//                        sqlitexx::cstring_view table, std::int64_t rowid) { ... });
-//     db.commit_hook([&] { return changes_are_valid(); });   // false turns the commit into a rollback
-//     db.rollback_hook([&] { ... });
-//     db.progress_handler(1000, [&] { return !cancelled; });  // false interrupts the running statement
-//
-//  - commit_hook: called before a transaction commits, also an automatic one around a single statement. It returns
-//    void (the commit goes on) or something that converts to bool: false turns the commit into a rollback, and the
-//    statement committing fails with extended_code::constraint_commithook.
-//  - rollback_hook: called after a transaction rolls back, by ROLLBACK or by an error. Not when closing the database
-//    rolls back what was left open.
-//  - update_hook: called for every row inserted, updated or deleted in a rowid table, with the kind of change, the
-//    schema ("main", "temp" or an attached database), the table and the row's rowid. Not for WITHOUT ROWID tables,
-//    nor for changes that clear a table at once (DELETE without WHERE may do that) or come from conflict resolution.
-//  - progress_handler: called every `instructions` virtual machine instructions while a statement runs (at least 1;
-//    a few thousand is a usual choice). It returns something that converts to bool: false interrupts the statement,
-//    which fails with primary_code::interrupt.
-//
-// A connection has one hook of each kind: setting one replaces the one before, which is released at once, and passing
-// nullptr clears it. The database keeps the callable (moved, for an rvalue) until then or until it closes. With a
-// registrations token (sqlitexx/registrations.hpp), the hook is also cleared when the token ends, unless another one
-// has replaced it; clearing a hook works while statements run, so a token always can.
-//
-// A hook must not change the connection that runs it: no statements on it, no closing it, no setting hooks from
-// inside a hook. SQLite gives the hook no way to report an error. With exceptions enabled, an exception from a commit
-// hook turns the commit into a rollback, and one from a progress handler interrupts the statement; an exception from
-// an update or rollback hook ends the program (std::terminate), since it may not unwind through SQLite.
+/// \file
+/// Hooks: C++ callables SQLite runs when transactions commit or roll back, when rows change, and while statements run.
+///
+///     db.update_hook([&](sqlitexx::native::update_kind kind, sqlitexx::cstring_view schema,
+///                        sqlitexx::cstring_view table, std::int64_t rowid) { ... });
+///     db.commit_hook([&] { return changes_are_valid(); });   // false turns the commit into a rollback
+///     db.rollback_hook([&] { ... });
+///     db.progress_handler(1000, [&] { return !cancelled; });  // false interrupts the running statement
+///
+///  - commit_hook: called before a transaction commits, also an automatic one around a single statement. It returns
+///    void (the commit goes on) or something that converts to bool: false turns the commit into a rollback, and the
+///    statement committing fails with extended_code::constraint_commithook.
+///  - rollback_hook: called after a transaction rolls back, by ROLLBACK or by an error. Not when closing the database
+///    rolls back what was left open.
+///  - update_hook: called for every row inserted, updated or deleted in a rowid table, with the kind of change, the
+///    schema ("main", "temp" or an attached database), the table and the row's rowid. Not for WITHOUT ROWID tables,
+///    nor for changes that clear a table at once (DELETE without WHERE may do that) or come from conflict resolution.
+///  - progress_handler: called every `instructions` virtual machine instructions while a statement runs (at least 1;
+///    a few thousand is a usual choice). It returns something that converts to bool: false interrupts the statement,
+///    which fails with primary_code::interrupt.
+///
+/// A connection has one hook of each kind: setting one replaces the one before, which is released at once, and passing
+/// nullptr clears it. The database keeps the callable (moved, for an rvalue) until then or until it closes. With a
+/// registrations token (sqlitexx/registrations.hpp), the hook is also cleared when the token ends, unless another one
+/// has replaced it; clearing a hook works while statements run, so a token always can.
+///
+/// A hook must not change the connection that runs it: no statements on it, no closing it, no setting hooks from
+/// inside a hook. SQLite gives the hook no way to report an error. With exceptions enabled, an exception from a commit
+/// hook turns the commit into a rollback, and one from a progress handler interrupts the statement; an exception from
+/// an update or rollback hook ends the program (std::terminate), since it may not unwind through SQLite.
 
 #include "sqlitexx/database.hpp"
 #include "sqlitexx/detail/hook_call.hpp"

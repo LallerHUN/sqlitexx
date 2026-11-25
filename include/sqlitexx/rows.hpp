@@ -1,27 +1,28 @@
 #ifndef SQLITEXX_ROWS_HPP
 #define SQLITEXX_ROWS_HPP
 
-// The rows of a query as a range:
-//
-//     for (sqlitexx::expected<std::tuple<std::string, int>>& row : select.rows<std::string, int>())
-//     {
-//         if (!row)
-//         {
-//             // row.error(): reading this row failed, or the query itself failed
-//             break;
-//         }
-//         use(std::get<0>(*row), std::get<1>(*row));
-//     }
-//
-// Each element is the expected<row<T...>> that read_row<T...>() gives, so an error can't go unnoticed. When reading a
-// row fails (NULL into a non-optional type, an integer that doesn't fit), only that row is an error, and iteration may
-// go on. When stepping fails, that error is the last element. Iteration starts where the statement is: rows() steps
-// without resetting it, like first() and for_each().
-//
-// It is a single-pass input range: the element lives in the range, so begin() runs the query once and every iterator
-// sees the current row. The range refers to its statement, so the statement must outlive it, and the range must stay
-// where it is while it is being iterated. In C++20 it is a std::ranges::input_range: views such as std::views::take
-// and std::views::filter work on it.
+/// \file
+/// The rows of a query as a range:
+///
+///     for (sqlitexx::expected<std::tuple<std::string, int>>& row : select.rows<std::string, int>())
+///     {
+///         if (!row)
+///         {
+///             // row.error(): reading this row failed, or the query itself failed
+///             break;
+///         }
+///         use(std::get<0>(*row), std::get<1>(*row));
+///     }
+///
+/// Each element is the expected<row<T...>> that read_row<T...>() gives, so an error can't go unnoticed. When reading a
+/// row fails (NULL into a non-optional type, an integer that doesn't fit), only that row is an error, and iteration may
+/// go on. When stepping fails, that error is the last element. Iteration starts where the statement is: rows() steps
+/// without resetting it, like first() and for_each().
+///
+/// It is a single-pass input range: the element lives in the range, so begin() runs the query once and every iterator
+/// sees the current row. The range refers to its statement, so the statement must outlive it, and the range must stay
+/// where it is while it is being iterated. In C++20 it is a std::ranges::input_range: views such as std::views::take
+/// and std::views::filter work on it.
 
 #include "sqlitexx/statement.hpp"
 
@@ -37,7 +38,7 @@ class rows_range
 public:
     using value_type = expected<row<T...>>;
 
-    // What iterator++ gives: the row it moved past, kept alive for *it++.
+    /// What iterator++ gives: the row it moved past, kept alive for *it++.
     class postfix_value
     {
     public:
@@ -64,7 +65,7 @@ public:
         using pointer = value_type*;
         using reference = value_type&;
 
-        // A default-constructed iterator is the end.
+        /// A default-constructed iterator is the end.
         iterator() noexcept = default;
 
         reference operator*() const noexcept
@@ -90,7 +91,7 @@ public:
             return passed;
         }
 
-        // Single pass: iterators differ only in whether they are at the end.
+        /// Single pass: iterators differ only in whether they are at the end.
         friend bool operator==(
             const iterator& left,
             const iterator& right
@@ -123,13 +124,13 @@ public:
         }
     };
 
-    // Lifetime: movable before iteration starts, never copied (two copies would step one statement).
+    /// Lifetime: movable before iteration starts, never copied (two copies would step one statement).
     rows_range(rows_range&&) noexcept = default;
     rows_range& operator=(rows_range&&) noexcept = default;
     rows_range(const rows_range&) = delete;
     rows_range& operator=(const rows_range&) = delete;
 
-    // Iteration. The first call to begin() steps to the first row; later calls give an iterator at the current row.
+    /// Iteration. The first call to begin() steps to the first row; later calls give an iterator at the current row.
     iterator begin()
     {
         if (!started)

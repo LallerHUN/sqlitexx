@@ -10,6 +10,8 @@ A C++ wrapper for [SQLite](https://sqlite.org) in two layers:
 
 > **Status:** early development. The API may still change between commits.
 
+The [API reference](https://lallerhun.github.io/sqlitexx/) documents every class and header of the latest release.
+
 ## Example
 
 ```cpp

@@ -1,10 +1,11 @@
 #ifndef SQLITEXX_DETAIL_HOOK_CALL_HPP
 #define SQLITEXX_DETAIL_HOOK_CALL_HPP
 
-// What SQLite calls for hooks made from C++ callables. Hooks can't report errors: a commit hook can only turn the
-// commit into a rollback and a progress handler can only interrupt, so with exceptions enabled an exception from them
-// does that. An exception from an update or rollback hook ends the program (std::terminate), as nothing may unwind
-// through SQLite and there is no way to stop what it reports.
+/// \file
+/// What SQLite calls for hooks made from C++ callables. Hooks can't report errors: a commit hook can only turn the
+/// commit into a rollback and a progress handler can only interrupt, so with exceptions enabled an exception from them
+/// does that. An exception from an update or rollback hook ends the program (std::terminate), as nothing may unwind
+/// through SQLite and there is no way to stop what it reports.
 
 #include "sqlitexx/config.hpp"
 #include "sqlitexx/cstring_view.hpp"
@@ -22,7 +23,7 @@ namespace sqlitexx
 {
 namespace detail
 {
-    // What a callable gives when called with `Args`; no `type` when it can't be called that way
+    /// What a callable gives when called with `Args`; no `type` when it can't be called that way
     template <class F, class Signature, class = void>
     struct hook_result
     {
@@ -37,7 +38,7 @@ namespace detail
         using type = decltype(std::declval<F&>()(std::declval<Args>()...));
     };
 
-    // Called with no arguments, giving `void` (when `void_allowed`) or something that converts to bool
+    /// Called with no arguments, giving `void` (when `void_allowed`) or something that converts to bool
     template <class F, bool void_allowed, class = void>
     struct is_yes_no_hook : std::false_type
     {
@@ -70,7 +71,7 @@ namespace detail
         std::int64_t
     );
 
-    // Whether a yes-or-no hook says yes: a void hook always does
+    /// Whether a yes-or-no hook says yes: a void hook always does
     template <class F>
     bool says_yes(
         F& hook,
@@ -90,7 +91,7 @@ namespace detail
         return static_cast<bool>(hook());
     }
 
-    // SQLite's answer for a yes-or-no hook: 0 goes on, 1 stops (rolls back, or interrupts). An exception stops.
+    /// SQLite's answer for a yes-or-no hook: 0 goes on, 1 stops (rolls back, or interrupts). An exception stops.
     template <class F>
     int answer(void* user_data) noexcept
     {

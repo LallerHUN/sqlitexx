@@ -1,14 +1,15 @@
 #ifndef SQLITEXX_DETAIL_REGISTRATION_BLOCK_HPP
 #define SQLITEXX_DETAIL_REGISTRATION_BLOCK_HPP
 
-// The control block of a function, aggregate or collation registered with a registrations token, and of every hook:
-// what SQLite gets as user_data, holding the callable, shared by SQLite and the token. Either side may let go first:
-// SQLite when the registration is replaced, removed or the database closes, the token when it removes, releases or
-// ends. The block goes when both have let go. For hooks, SQLite owns nothing: the database's hook_slots take its side.
-//
-// The callable ends when SQLite lets go. When the token ends without having removed the registration (a statement was
-// running), it ends the callable itself: callable() is null from then on, and what SQLite calls fails (functions) or
-// ends the program (collations).
+/// \file
+/// The control block of a function, aggregate or collation registered with a registrations token, and of every hook:
+/// what SQLite gets as user_data, holding the callable, shared by SQLite and the token. Either side may let go first:
+/// SQLite when the registration is replaced, removed or the database closes, the token when it removes, releases or
+/// ends. The block goes when both have let go. For hooks, SQLite owns nothing: the database's hook_slots take its side.
+///
+/// The callable ends when SQLite lets go. When the token ends without having removed the registration (a statement was
+/// running), it ends the callable itself: callable() is null from then on, and what SQLite calls fails (functions) or
+/// ends the program (collations).
 
 #include "sqlitexx/cstring_view.hpp"
 #include "sqlitexx/native/result.hpp"
@@ -49,11 +50,11 @@ namespace detail
         registration_block(const registration_block&) = delete;
         registration_block& operator=(const registration_block&) = delete;
 
-        // SQLite's destroy callback: SQLite no longer refers to the block. For hooks, the hook_slots call it.
+        /// SQLite's destroy callback: SQLite no longer refers to the block. For hooks, the hook_slots call it.
         static void released_by_sqlite(void* block) noexcept;
 
     protected:
-        // `slots` for hooks, null for functions and collations
+        /// `slots` for hooks, null for functions and collations
         registration_block(
             sqlite3* connection,
             std::unique_ptr<char[]> registered_name,
@@ -64,7 +65,7 @@ namespace detail
 
         virtual ~registration_block();
 
-        // The name as SQLite needs it: NUL-terminated. Null when copying it ran out of memory.
+        /// The name as SQLite needs it: NUL-terminated. Null when copying it ran out of memory.
         static std::unique_ptr<char[]> copy_name(cstring_view name) noexcept;
 
         virtual void end_callable() noexcept = 0;
@@ -81,11 +82,11 @@ namespace detail
         bool held_by_token = false;
         registration_block* next = nullptr;
 
-        // For the token: removes the registration from SQLite, which then releases the block. Ok, doing nothing,
-        // when SQLite has released it already.
+        /// For the token: removes the registration from SQLite, which then releases the block. Ok, doing nothing,
+        /// when SQLite has released it already.
         native::result remove() noexcept;
 
-        // The token lets go; the block goes when SQLite has let go too
+        /// The token lets go; the block goes when SQLite has let go too
         void released_by_token() noexcept;
     };
 
@@ -93,7 +94,7 @@ namespace detail
     class scoped_callable final : public registration_block
     {
     public:
-        // Null when out of memory. Moving the callable in is the user's type's work: what it throws passes through.
+        /// Null when out of memory. Moving the callable in is the user's type's work: what it throws passes through.
         static scoped_callable* make(
             sqlite3* connection,
             cstring_view name,
@@ -111,7 +112,7 @@ namespace detail
                 scoped_callable(connection, std::move(copied), arguments, registered, nullptr, std::move(callable));
         }
 
-        // A hook's block: no name, kept by the database's hook_slots. Null when out of memory.
+        /// A hook's block: no name, kept by the database's hook_slots. Null when out of memory.
         static scoped_callable* make_hook(
             sqlite3* connection,
             hook_slots* slots,
@@ -123,13 +124,13 @@ namespace detail
                 scoped_callable(connection, std::unique_ptr<char[]>(), 0, registered, slots, std::move(callable));
         }
 
-        // What SQLite gets as user_data: the block, as the registration_block that released_by_sqlite expects
+        /// What SQLite gets as user_data: the block, as the registration_block that released_by_sqlite expects
         void* user_data() noexcept
         {
             return static_cast<registration_block*>(this);
         }
 
-        // What SQLite calls through user_data. Null once the token has ended the callable.
+        /// What SQLite calls through user_data. Null once the token has ended the callable.
         static F* callable(void* user_data) noexcept
         {
             return static_cast<scoped_callable*>(static_cast<registration_block*>(user_data))->object;
@@ -173,8 +174,8 @@ namespace detail
         }
     };
 
-    // How the callers reach the callable behind user_data: owned by SQLite alone (created without a token), or
-    // through a token's control block
+    /// How the callers reach the callable behind user_data: owned by SQLite alone (created without a token), or
+    /// through a token's control block
     template <class F>
     struct owned_by_sqlite
     {

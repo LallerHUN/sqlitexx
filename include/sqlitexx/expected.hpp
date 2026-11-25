@@ -1,9 +1,10 @@
 #ifndef SQLITEXX_EXPECTED_HPP
 #define SQLITEXX_EXPECTED_HPP
 
-// expected<T, E> for the typed API: std::expected or expected-lite, as CMake chose when sqlitexx was configured (see
-// SQLITEXX_EXPECTED in CMakeLists.txt). Use these names, not std:: or nonstd:: ones, and code keeps compiling whichever
-// was chosen.
+/// \file
+/// expected<T, E> for the typed API: std::expected or expected-lite, as CMake chose when sqlitexx was configured (see
+/// SQLITEXX_EXPECTED in CMakeLists.txt). Use these names, not std:: or nonstd:: ones, and code keeps compiling
+/// whichever was chosen.
 
 #include "sqlitexx/config.hpp"
 #include "sqlitexx/error.hpp"
@@ -43,7 +44,7 @@ namespace sqlitexx
 template <class T, class E = error>
 using expected = nonstd::expected<T, E>;
 
-// expected-lite names it unexpected only from C++17 on; unexpected_type works for every standard.
+/// expected-lite names it unexpected only from C++17 on; unexpected_type works for every standard.
 template <class E>
 using unexpected = nonstd::unexpected_type<E>;
 
