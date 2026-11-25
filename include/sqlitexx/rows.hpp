@@ -169,7 +169,7 @@ private:
         if (!stepped)
         {
             // The last element: the query cannot go on
-            current = value_type(unexpect, stepped.error());
+            current.emplace(unexpect, std::move(stepped.error()));
             finished = true;
             return;
         }

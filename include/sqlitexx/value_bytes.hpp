@@ -33,8 +33,9 @@ namespace sqlitexx
 template <>
 struct value_traits<std::vector<std::byte>>
 {
+    template <class Target>
     static native::result bind(
-        native::statement& stmt,
+        Target& stmt,
         int index,
         const std::vector<std::byte>& value
     ) noexcept
@@ -42,10 +43,11 @@ struct value_traits<std::vector<std::byte>>
         return stmt.bind_blob(index, value.data(), value.size());
     }
 
+    template <class Source>
     static expected<std::vector<std::byte>> read(
-        const native::statement& stmt,
+        const Source& stmt,
         int index
-    )
+    ) noexcept
     {
         const std::byte* data = static_cast<const std::byte*>(stmt.column_blob(index));
         const std::size_t size = stmt.column_bytes(index);
@@ -53,7 +55,12 @@ struct value_traits<std::vector<std::byte>>
         {
             return std::vector<std::byte>();
         }
-        return std::vector<std::byte>(data, data + size);
+        return detail::allocation_guard(
+            [&]() -> expected<std::vector<std::byte>>
+            {
+                return std::vector<std::byte>(data, data + size);
+            }
+        );
     }
 };
 
@@ -85,8 +92,9 @@ struct value_traits<
 {
     using span = std::span<Byte, Extent>;
 
+    template <class Target>
     static native::result bind(
-        native::statement& stmt,
+        Target& stmt,
         int index,
         span value
     ) noexcept
@@ -94,10 +102,11 @@ struct value_traits<
         return stmt.bind_blob(index, value.data(), value.size());
     }
 
+    template <class Source>
     static expected<span> read(
-        const native::statement& stmt,
+        const Source& stmt,
         int index
-    )
+    ) noexcept
     {
         static_assert(
             std::is_const_v<Byte> && Extent == std::dynamic_extent,

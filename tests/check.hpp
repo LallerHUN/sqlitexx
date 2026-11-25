@@ -5,8 +5,31 @@
 
 #include <cstdio>
 
+#if defined(_MSC_VER)
+#include <crtdbg.h>
+#include <cstdlib>
+#endif
+
 namespace test
 {
+#if defined(_MSC_VER)
+// abort() and failed CRT checks report on stderr and end the test: in a Debug build they would wait on a dialog box,
+// and CI with them
+struct no_dialogs
+{
+    no_dialogs()
+    {
+        _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
+        _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+        _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
+        _CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
+        _CrtSetReportFile(_CRT_ERROR, _CRTDBG_FILE_STDERR);
+    }
+};
+
+static const no_dialogs report_without_dialogs;
+#endif
+
 inline int& failures()
 {
     static int count = 0;

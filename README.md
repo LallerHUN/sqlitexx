@@ -114,7 +114,7 @@ cmake --install build --config Release --prefix <prefix>
 ```
 
 ```cmake
-find_package(sqlitexx 0.2 REQUIRED) # with <prefix> in CMAKE_PREFIX_PATH
+find_package(sqlitexx 0.3 REQUIRED) # with <prefix> in CMAKE_PREFIX_PATH
 target_link_libraries(my_app PRIVATE sqlitexx::sqlitexx)
 ```
 
@@ -180,6 +180,7 @@ For an offline build, unpack the dependencies yourself and point CMake at them w
 | `nullptr` | NULL | not readable |
 | `sqlitexx::blob` (`std::vector<unsigned char>`) | as a blob | |
 | `std::vector<std::byte>` (C++17) | as a blob | |
+| `sqlitexx::zeroblob{size}` | as a blob of `size` zero bytes, without building it in memory | not readable |
 | `std::span<const std::byte>`, `std::span<const unsigned char>` (C++20) | as a blob, without copying it first | a view into SQLite's memory until the next step |
 | `std::span` of writable bytes, or with a fixed extent (C++20) | as a blob | not readable |
 | `std::u8string`, `std::u8string_view`, `u8cstring_view` (C++20) | as UTF-8 text | like their `char` counterparts |
@@ -198,7 +199,7 @@ too, so one kind of check covers both:
 |---|---|
 | `done` | `first()` found no row |
 | `mismatch` | NULL read into a non-optional type, or an integer that doesn't fit |
-| `nomem` | SQLite ran out of memory converting a column to text |
+| `nomem` | Out of memory, in SQLite or in sqlitexx (see [Out of memory](#out-of-memory)) |
 | `misuse` | `prepare()` was given no SQL statement, or more than one |
 
 `sqlitexx::on(code, handler)` handles one kind of error inside `or_else` and passes every other error on unchanged.
@@ -220,6 +221,38 @@ auto added = db.prepare("INSERT INTO user(name) VALUES(?)")
                      return sql::expected<bool>(false); // already there
                  }));
 ```
+
+### Out of memory
+
+With exceptions enabled, no sqlitexx call lets `std::bad_alloc` out. Running out of memory, whether in SQLite or in
+sqlitexx copying text, blobs or error messages, is an error with `primary_code::nomem`:
+
+```cpp
+sql::expected<std::string> name = stmt->column<std::string>(0);   // noexcept
+if (!name && name.error().primary() == sql::native::primary_code::nomem)
+{
+    // no try/catch needed
+}
+```
+
+- The calls that run none of your code are `noexcept`: `database::open`, `execute`, `prepare`, `backup_to`,
+  `open_blob`, `statement::step` and `reset`, the `blob_stream` calls that take a pointer, and `transaction`.
+- The calls that bind or read values are `noexcept` when the `value_traits` of the types are. The built-in ones are,
+  also for `std::string` and `blob`, so `bind(1, name)` and `column<std::string>(0)` are `noexcept`. With your own
+  traits they follow your `bind()` and `read()`: declare them `noexcept` when they cannot throw.
+- `create_function`, `create_aggregate` and the chaining helpers take what they keep by value. Passing an lvalue
+  copies it where you call them, in your code; the calls themselves only move, and are `noexcept` when moving can't
+  throw. So nothing they keep refers to your variables.
+- sqlitexx catches only its own allocations. What your code throws reaches you unchanged, `std::bad_alloc` included:
+  your traits, your callbacks, the copy constructors of what you register. The statement stays usable afterwards.
+  The one exception is code that SQLite calls, SQL functions and aggregates: there every exception becomes an error
+  of the SQL call, since none may unwind through SQLite.
+- When an error's message can't be copied, the error keeps its code and goes without a message.
+
+Without exceptions, a failed allocation ends the program, as it does in the standard library. SQLite's own out of
+memory is a `nomem` error either way. With MSVC's iterator debugging (its Debug builds), the standard library gives
+every `std::string` a proxy object on the heap, even an empty one, and ends the program itself when that fails; the
+guarantee holds in release builds.
 
 ### Chaining helpers
 
@@ -250,6 +283,76 @@ while (select && select->step().value_or(false))
   wins.
 - No column by that name is a `range` error.
 - Each call searches the columns. In a loop over many rows, call `column_index()` once and read by index.
+
+### SQL functions
+
+`database::create_function(name, callable)` makes a C++ function callable from SQL. The parameters and the return
+type are read and written like columns and parameters, so every type in the Values table works:
+
+```cpp
+db.create_function("greet", [](const std::string& name) { return "Hello, " + name; });
+
+sql::expected<std::string> hello = db.prepare("SELECT greet('Alice')").and_then(sql::first<std::string>());
+```
+
+- The callable is a lambda without `auto` parameters, a function object with one `operator()`, or a function pointer.
+  SQLite keeps a copy until the function is replaced or the database closes.
+- NULL arrives only in an `optional<T>` parameter; anywhere else the call fails with `mismatch`. Returning an empty
+  `optional<T>`, or returning `void`, gives NULL.
+- To fail the call, return an `expected<T>` holding an error: the statement fails with its code and message. With
+  exceptions enabled, a thrown exception fails the call too, and never reaches SQLite.
+- Pass `native::function_flags::deterministic` when the same arguments always give the same result, so SQLite can
+  optimize the calls and use the function in an index.
+
+Your own types work as arguments and results when their `value_traits` are templates, as in
+[sqlitexx/value.hpp](include/sqlitexx/value.hpp).
+
+### Aggregate and window functions
+
+`database::create_aggregate(name, prototype)` makes a class an aggregate, used like `SUM()` or `GROUP_CONCAT()`.
+The class has a `step(...)` member, called for every row, and a `finish()` member, which gives the result:
+
+```cpp
+struct joined
+{
+    std::string separator;
+    std::string text;
+
+    void step(const std::string& value) { text += text.empty() ? value : separator + value; }
+    std::string finish() const { return text; }
+};
+
+db.create_aggregate("joined", joined{", ", ""});
+
+sql::expected<std::string> names = db.prepare("SELECT joined(name) FROM player WHERE team = 'red'")
+                                       .and_then(sql::first<std::string>());   // "Ann, Bob, Dee"
+```
+
+- Each group works on its own copy of the prototype, so the prototype can carry settings like the separator.
+- `step()` takes its parameters like an SQL function: NULL only into `optional<T>`. It returns `void`, or
+  `expected<void>` to fail the query with that error.
+- `finish()` returns the result like an SQL function does: `optional<T>` for NULL, `expected<T>` to fail. For an
+  empty table it runs on a fresh copy that saw no rows, so a count gives 0.
+
+A class that also has `inverse(...)` (taking a row back out) and `value()` (the result so far) is registered as a
+window function too, for `OVER (...)`:
+
+```cpp
+struct moving_sum
+{
+    std::int64_t sum = 0;
+
+    void step(std::int64_t value) { sum += value; }
+    void inverse(std::int64_t value) { sum -= value; }
+    std::int64_t value() const { return sum; }
+    std::int64_t finish() const { return sum; }
+};
+
+db.create_aggregate("moving_sum", moving_sum());
+// SELECT moving_sum(amount) OVER (ORDER BY day ROWS BETWEEN 6 PRECEDING AND CURRENT ROW) FROM sales
+```
+
+Without `inverse()` and `value()`, using the aggregate with `OVER` is an error when the statement is prepared.
 
 ### Rows as a range
 
@@ -293,6 +396,58 @@ out of scope unless `commit()` succeeded. `mode` is `transaction_mode::deferred`
 `exclusive`, as in SQL's `BEGIN`. When `commit()` fails, `active()` tells whether the transaction is still open: it
 is after a deferred constraint violation or `SQLITE_BUSY`, so you can fix the data or retry, while some other errors
 make SQLite roll back on its own. A transaction must not outlive its database.
+
+### Backup
+
+`source.backup_to(destination)` copies a whole database over another one, while both stay usable. It's how an
+in-memory database gets saved to a file, and restoring is the same call the other way round:
+
+```cpp
+sql::expected<sql::database> file = sql::database::open("saved.sqlite");
+sql::expected<void> saved = file ? memory.backup_to(*file) : sql::expected<void>(sql::unexpect, file.error());
+```
+
+The call belongs to the database being copied, so the direction is clear: `a.backup_to(b)` replaces everything in
+`b` with `a`'s content.
+
+For large databases, `begin_backup_to(destination)` gives a `backup` that copies in steps: `step(pages)` returns
+true once the copy is complete, and `remaining()` and `page_count()` report progress. Between steps, other
+connections can use the source. A `busy` or `locked` error from `step()` means a lock was in the way, and stepping
+again later retries.
+
+### Large blobs in pieces
+
+`open_blob(table, column, rowid)` opens one blob for reading or writing in pieces, so a large one never has to fit in
+memory whole. The `blob_stream` it gives has a position, like a file:
+
+```cpp
+// Reserve the space first: a blob's size can't change through a stream
+db.prepare("INSERT INTO file(data) VALUES(?)").and_then(sql::execute_with(sql::zeroblob{size}));
+sql::expected<sql::blob_stream> out =
+    db.open_blob("file", "data", db.last_insert_rowid(), sql::blob_access::read_write);
+out->write(chunk);                        // continues from the position each time
+
+sql::expected<sql::blob_stream> in = db.open_blob("file", "data", rowid);
+std::vector<unsigned char> all;
+in->read(all);                            // the rest of the blob; all.size() is what was read
+sql::expected<std::size_t> got = in->read(all, 4096);   // at most 4096 bytes; *got == all.size()
+
+std::array<unsigned char, 4096> buffer;   // or in pieces, without allocating
+sql::expected<std::size_t> filled = in->read(buffer);   // up to buffer.size(); 0 at the end
+```
+
+- `write()` takes any contiguous container of bytes (`std::vector`, `std::string`, `std::array`, `std::span`,
+  `string_view`, C arrays), or a pointer and a size. `write(data, count)` writes only the first `count` bytes.
+- `read()` into a container that can grow (`std::vector`, `std::string`) sizes it to what was read. Into one that
+  can't (`std::array`, `std::span`, C arrays) it fills up to the size, without allocating. `read(out, count)` reads
+  at most `count` bytes.
+- A `count` larger than the container is a `range` error, before anything is read or written.
+- Containers hold bytes: `char`, `signed char`, `unsigned char`, `std::byte` or `char8_t`. Wider elements don't
+  compile, since their bytes depend on the machine.
+- `read()` gives how many bytes it read: fewer near the end, 0 at the end. `seek()` moves the position.
+- Writing past the end is a `range` error and writes nothing. Reserve the size with `zeroblob` when inserting.
+- `reopen(rowid)` moves to the same column of another row, much faster than opening again.
+- When the row changes through another statement, the stream expires and reads and writes fail with `abort`.
 
 ### Waiting for locks
 

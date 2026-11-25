@@ -2,6 +2,8 @@
 #define SQLITEXX_STATEMENT_HPP
 
 #include "sqlitexx/config.hpp"
+#include "sqlitexx/detail/noexcept_traits.hpp"
+#include "sqlitexx/detail/out_of_memory.hpp"
 #include "sqlitexx/detail/utility.hpp"
 #include "sqlitexx/error.hpp"
 #include "sqlitexx/expected.hpp"
@@ -38,7 +40,9 @@ template <class... T>
 class rows_range;
 
 // A prepared statement with typed binding and reading. Move-only. Every operation that can fail returns
-// expected<...>, so calls chain with and_then / or_else / transform.
+// expected<...>, so calls chain with and_then / or_else / transform. Running out of memory is a primary_code::nomem
+// error, never std::bad_alloc. The calls that bind or read values are noexcept when the value_traits of their types
+// are, as the built-in ones are; exceptions from other traits pass through unchanged (see sqlitexx/value.hpp).
 class statement final
 {
 public:
@@ -55,18 +59,18 @@ public:
     // Binding. bind() binds its arguments to parameters 1, 2, 3, ... in order. On a temporary statement it gives
     // the statement back, ready for the next step in a chain.
     template <class... Args>
-    expected<void> bind(const Args&... args) &
+    expected<void> bind(const Args&... args) & noexcept(detail::all_bind_noexcept<Args...>::value)
     {
         return bind_from(1, args...);
     }
 
     template <class... Args>
-    expected<statement> bind(const Args&... args) &&
+    expected<statement> bind(const Args&... args) && noexcept(detail::all_bind_noexcept<Args...>::value)
     {
         expected<void> bound = bind_from(1, args...);
         if (!bound)
         {
-            return expected<statement>(unexpect, bound.error());
+            return expected<statement>(unexpect, std::move(bound.error()));
         }
         return expected<statement>(std::move(*this));
     }
@@ -75,7 +79,7 @@ public:
     expected<void> bind_at(
         int index,
         const T& value
-    )
+    ) noexcept(detail::binds_noexcept<T>::value)
     {
         return check(value_traits<typename std::decay<T>::type>::bind(stmt, index, value));
     }
@@ -85,7 +89,7 @@ public:
     expected<void> bind_named(
         const char* name,
         const T& value
-    )
+    ) noexcept(detail::binds_noexcept<T>::value)
     {
         const int index = stmt.bind_parameter_index(name);
         if (index == 0)
@@ -96,13 +100,13 @@ public:
     }
 
     // Running. step() gives true when a row is ready and false when the statement has finished.
-    expected<bool> step();
-    expected<void> reset();
+    expected<bool> step() noexcept;
+    expected<void> reset() noexcept;
 
     // Resets, binds the arguments (all earlier bindings are cleared first) and runs to completion; rows are
     // discarded. Suits INSERT, UPDATE, DELETE and DDL, and runs the same statement again with new values.
     template <class... Args>
-    expected<void> execute(const Args&... args)
+    expected<void> execute(const Args&... args) noexcept(detail::all_bind_noexcept<Args...>::value)
     {
         restart();
         expected<void> bound = bind_from(1, args...);
@@ -115,7 +119,7 @@ public:
             expected<bool> stepped = step();
             if (!stepped)
             {
-                return expected<void>(unexpect, stepped.error());
+                return expected<void>(unexpect, std::move(stepped.error()));
             }
             if (!*stepped)
             {
@@ -126,12 +130,12 @@ public:
 
     // Steps once and reads the row. A query that produces no row gives a primary_code::done error.
     template <class... T>
-    expected<row<T...>> first()
+    expected<row<T...>> first() noexcept(detail::row_reads_noexcept<T...>::value)
     {
         expected<bool> stepped = step();
         if (!stepped)
         {
-            return expected<row<T...>>(unexpect, stepped.error());
+            return expected<row<T...>>(unexpect, std::move(stepped.error()));
         }
         if (!*stepped)
         {
@@ -151,7 +155,7 @@ public:
             expected<bool> stepped = step();
             if (!stepped)
             {
-                return expected<void>(unexpect, stepped.error());
+                return expected<void>(unexpect, std::move(stepped.error()));
             }
             if (!*stepped)
             {
@@ -160,7 +164,7 @@ public:
             expected<row<T...>> values = read_row<T...>();
             if (!values)
             {
-                return expected<void>(unexpect, values.error());
+                return expected<void>(unexpect, std::move(values.error()));
             }
             call_with_row(callback, *values, std::integral_constant<bool, sizeof...(T) == 1>());
         }
@@ -176,7 +180,7 @@ public:
 
     // Reading the current row (indexes count from 0)
     template <class T>
-    expected<T> column(int index) const
+    expected<T> column(int index) const noexcept(detail::reads_noexcept<T>::value)
     {
         return read_column<T>(index, detail::is_optional<T>());
     }
@@ -185,21 +189,21 @@ public:
     // column's name is its AS alias, or else what SQLite makes of the expression, so give computed columns an alias.
     // Each call searches the columns: in a loop, look the index up once with column_index().
     template <class T>
-    expected<T> column(string_view name) const
+    expected<T> column(string_view name) const noexcept(detail::reads_noexcept<T>::value)
     {
         expected<int> index = column_index(name);
         if (!index)
         {
-            return expected<T>(unexpect, index.error());
+            return expected<T>(unexpect, std::move(index.error()));
         }
         return column<T>(*index);
     }
 
     // The index of the first column with this name; a primary_code::range error when there is none.
-    expected<int> column_index(string_view name) const;
+    expected<int> column_index(string_view name) const noexcept;
 
     template <class... T>
-    expected<row<T...>> read_row() const
+    expected<row<T...>> read_row() const noexcept(detail::row_reads_noexcept<T...>::value)
     {
         return read_row_impl<T...>(std::integral_constant<bool, sizeof...(T) == 1>());
     }
@@ -212,13 +216,13 @@ private:
     native::statement stmt;
 
     // Errors
-    error failure(native::result code) const;
-    error no_rows() const;
-    error no_parameter(const char* name) const;
-    error no_column(string_view name) const;
-    error null_column(int index) const;
+    error failure(native::result code) const noexcept;
+    error no_rows() const noexcept;
+    error no_parameter(const char* name) const noexcept;
+    error no_column(string_view name) const noexcept;
+    error null_column(int index) const noexcept;
 
-    expected<void> check(native::result code) const
+    expected<void> check(native::result code) const noexcept
     {
         if (code.failed())
         {
@@ -242,7 +246,10 @@ private:
         int index,
         const Arg& arg,
         const Rest&... rest
-    )
+    ) noexcept(detail::
+                   all_bind_noexcept<
+                       Arg,
+                       Rest...>::value)
     {
         expected<void> bound = bind_at(index, arg);
         if (!bound)
@@ -257,7 +264,7 @@ private:
     expected<T> read_column(
         int index,
         std::false_type /*is_optional*/
-    ) const
+    ) const noexcept(detail::reads_noexcept<T>::value)
     {
         if (stmt.column_type(index) == native::value_type::null)
         {
@@ -270,27 +277,29 @@ private:
     expected<T> read_column(
         int index,
         std::true_type /*is_optional*/
-    ) const
+    ) const noexcept(detail::reads_noexcept<T>::value)
     {
         return value_traits<T>::read(stmt, index);
     }
 
     template <class T>
-    expected<T> read_row_impl(std::true_type /*single column*/) const
+    expected<T> read_row_impl(std::true_type /*single column*/) const noexcept(detail::reads_noexcept<T>::value)
     {
         return column<T>(0);
     }
 
     template <class... T>
-    expected<std::tuple<T...>> read_row_impl(std::false_type /*single column*/) const
+    expected<std::tuple<T...>> read_row_impl(std::false_type /*single column*/) const noexcept(
+        detail::row_reads_noexcept<T...>::value
+    )
     {
         std::tuple<T...> values;
         expected<void> filled = read_into<0>(values, std::integral_constant<bool, sizeof...(T) == 0>());
         if (!filled)
         {
-            return expected<std::tuple<T...>>(unexpect, filled.error());
+            return expected<std::tuple<T...>>(unexpect, std::move(filled.error()));
         }
-        return values;
+        return expected<std::tuple<T...>>(std::move(values));
     }
 
     template <
@@ -316,7 +325,7 @@ private:
         expected<element> value = column<element>(static_cast<int>(I));
         if (!value)
         {
-            return expected<void>(unexpect, value.error());
+            return expected<void>(unexpect, std::move(value.error()));
         }
         std::get<I>(values) = std::move(*value);
         return read_into<I + 1>(values, std::integral_constant<bool, I + 1 == std::tuple_size<Tuple>::value>());
