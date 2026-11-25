@@ -48,13 +48,13 @@ public:
     ~transaction();
 
     // Lifetime
-    static expected<transaction> begin(
+    SQLITEXX_DETAIL_NODISCARD static expected<transaction> begin(
         database& target,
         transaction_mode mode = transaction_mode::deferred
     ) noexcept;
 
-    expected<void> commit() noexcept;
-    expected<void> rollback() noexcept;
+    SQLITEXX_DETAIL_NODISCARD expected<void> commit() noexcept;
+    SQLITEXX_DETAIL_NODISCARD expected<void> rollback() noexcept;
 
     // True until commit() or rollback() ends the transaction, or SQLite rolls it back itself
     bool active() const noexcept;
@@ -77,7 +77,7 @@ private:
 //             .transform([&] { return db.last_insert_rowid(); });
 //     });
 template <class F>
-auto in_transaction(
+SQLITEXX_DETAIL_NODISCARD auto in_transaction(
     database& db,
     F&& body,
     transaction_mode mode = transaction_mode::deferred

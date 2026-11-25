@@ -59,13 +59,17 @@ public:
     // Binding. bind() binds its arguments to parameters 1, 2, 3, ... in order. On a temporary statement it gives
     // the statement back, ready for the next step in a chain.
     template <class... Args>
-    expected<void> bind(const Args&... args) & noexcept(detail::all_bind_noexcept<Args...>::value)
+    SQLITEXX_DETAIL_NODISCARD expected<void> bind(const Args&... args) & noexcept(
+        detail::all_bind_noexcept<Args...>::value
+    )
     {
         return bind_from(1, args...);
     }
 
     template <class... Args>
-    expected<statement> bind(const Args&... args) && noexcept(detail::all_bind_noexcept<Args...>::value)
+    SQLITEXX_DETAIL_NODISCARD expected<statement> bind(const Args&... args) && noexcept(
+        detail::all_bind_noexcept<Args...>::value
+    )
     {
         expected<void> bound = bind_from(1, args...);
         if (!bound)
@@ -76,7 +80,7 @@ public:
     }
 
     template <class T>
-    expected<void> bind_at(
+    SQLITEXX_DETAIL_NODISCARD expected<void> bind_at(
         int index,
         const T& value
     ) noexcept(detail::binds_noexcept<T>::value)
@@ -86,7 +90,7 @@ public:
 
     // The name includes its prefix: ":id", "@id" or "$id".
     template <class T>
-    expected<void> bind_named(
+    SQLITEXX_DETAIL_NODISCARD expected<void> bind_named(
         const char* name,
         const T& value
     ) noexcept(detail::binds_noexcept<T>::value)
@@ -100,13 +104,15 @@ public:
     }
 
     // Running. step() gives true when a row is ready and false when the statement has finished.
-    expected<bool> step() noexcept;
-    expected<void> reset() noexcept;
+    SQLITEXX_DETAIL_NODISCARD expected<bool> step() noexcept;
+    SQLITEXX_DETAIL_NODISCARD expected<void> reset() noexcept;
 
     // Resets, binds the arguments (all earlier bindings are cleared first) and runs to completion; rows are
     // discarded. Suits INSERT, UPDATE, DELETE and DDL, and runs the same statement again with new values.
     template <class... Args>
-    expected<void> execute(const Args&... args) noexcept(detail::all_bind_noexcept<Args...>::value)
+    SQLITEXX_DETAIL_NODISCARD expected<void> execute(const Args&... args) noexcept(
+        detail::all_bind_noexcept<Args...>::value
+    )
     {
         restart();
         expected<void> bound = bind_from(1, args...);
@@ -130,7 +136,7 @@ public:
 
     // Steps once and reads the row. A query that produces no row gives a primary_code::done error.
     template <class... T>
-    expected<row<T...>> first() noexcept(detail::row_reads_noexcept<T...>::value)
+    SQLITEXX_DETAIL_NODISCARD expected<row<T...>> first() noexcept(detail::row_reads_noexcept<T...>::value)
     {
         expected<bool> stepped = step();
         if (!stepped)
@@ -148,7 +154,7 @@ public:
     template <
         class... T,
         class F>
-    expected<void> for_each(F&& callback)
+    SQLITEXX_DETAIL_NODISCARD expected<void> for_each(F&& callback)
     {
         for (;;)
         {
@@ -180,7 +186,7 @@ public:
 
     // Reading the current row (indexes count from 0)
     template <class T>
-    expected<T> column(int index) const noexcept(detail::reads_noexcept<T>::value)
+    SQLITEXX_DETAIL_NODISCARD expected<T> column(int index) const noexcept(detail::reads_noexcept<T>::value)
     {
         return read_column<T>(index, detail::is_optional<T>());
     }
@@ -189,7 +195,7 @@ public:
     // column's name is its AS alias, or else what SQLite makes of the expression, so give computed columns an alias.
     // Each call searches the columns: in a loop, look the index up once with column_index().
     template <class T>
-    expected<T> column(string_view name) const noexcept(detail::reads_noexcept<T>::value)
+    SQLITEXX_DETAIL_NODISCARD expected<T> column(string_view name) const noexcept(detail::reads_noexcept<T>::value)
     {
         expected<int> index = column_index(name);
         if (!index)
@@ -200,10 +206,10 @@ public:
     }
 
     // The index of the first column with this name; a primary_code::range error when there is none.
-    expected<int> column_index(string_view name) const noexcept;
+    SQLITEXX_DETAIL_NODISCARD expected<int> column_index(string_view name) const noexcept;
 
     template <class... T>
-    expected<row<T...>> read_row() const noexcept(detail::row_reads_noexcept<T...>::value)
+    SQLITEXX_DETAIL_NODISCARD expected<row<T...>> read_row() const noexcept(detail::row_reads_noexcept<T...>::value)
     {
         return read_row_impl<T...>(std::integral_constant<bool, sizeof...(T) == 1>());
     }

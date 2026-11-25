@@ -6,6 +6,12 @@ All notable changes to sqlitexx are listed here. The format is based on
 
 ## [Unreleased]
 
+### Changed
+
+- Every call that returns an `expected`, and the chaining helpers, are `[[nodiscard]]` from C++17, and with Clang
+  from C++11: ignoring an error warns. Before, C++23 builds with `std::expected` didn't warn, unlike C++17 and C++20
+  with expected-lite. Cast to `void` where ignoring is meant.
+
 ## [0.4.0] - 2026-11-25
 
 ### Added

@@ -193,7 +193,12 @@ Reading NULL into anything other than `optional<T>` is an error. Your own types 
 ### Errors
 
 `sqlitexx::error` holds SQLite's extended result code and its message. Errors sqlitexx finds itself use SQLite codes
-too, so one kind of check covers both:
+too, so one kind of check covers both.
+
+An ignored error is a compiler warning: every call that returns an `expected` is `[[nodiscard]]` from C++17 (and
+with Clang from C++11), so `db.execute("DELETE FROM t");` without looking at the result warns. Where ignoring it is
+meant, say so: `static_cast<void>(db.execute("DELETE FROM t"));`. The chaining helpers (`first<T>()`,
+`execute_with(...)`, ...) are marked too, as one that isn't passed to `and_then` does nothing.
 
 | Primary code | Meaning in sqlitexx |
 |---|---|
