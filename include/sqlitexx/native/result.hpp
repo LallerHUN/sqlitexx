@@ -7,7 +7,7 @@ namespace sqlitexx
 {
 namespace native
 {
-    // The primary result codes (the low 8 bits of an extended code). Values match SQLITE_* in sqlite3.h.
+    /// The primary result codes (the low 8 bits of an extended code). Values match SQLITE_* in sqlite3.h.
     enum class primary_code : int
     {
         ok = 0,
@@ -43,8 +43,8 @@ namespace native
         done = 101,
     };
 
-    // A result code returned by the native layer. Connections opened through sqlitexx always report extended result
-    // codes, so code() is the extended code and primary() its primary part.
+    /// A result code returned by the native layer. Connections opened through sqlitexx always report extended result
+    /// codes, so code() is the extended code and primary() its primary part.
     class result final
     {
     public:
@@ -65,32 +65,32 @@ namespace native
             return static_cast<primary_code>(value & 0xff);
         }
 
-        // SQLITE_OK
+        /// SQLITE_OK
         constexpr bool ok() const noexcept
         {
             return value == static_cast<int>(primary_code::ok);
         }
 
-        // SQLITE_ROW: step() produced a row
+        /// SQLITE_ROW: step() produced a row
         constexpr bool row() const noexcept
         {
             return value == static_cast<int>(primary_code::row);
         }
 
-        // SQLITE_DONE: step() finished
+        /// SQLITE_DONE: step() finished
         constexpr bool done() const noexcept
         {
             return value == static_cast<int>(primary_code::done);
         }
 
-        // Anything other than ok, row or done
+        /// Anything other than ok, row or done
         constexpr bool failed() const noexcept
         {
             return !ok() && !row() && !done();
         }
 
-        // English description of the code (sqlite3_errstr). It does not depend on any connection; for the message of
-        // the failed call itself use connection::errmsg().
+        /// English description of the code (sqlite3_errstr). It does not depend on any connection; for the message of
+        /// the failed call itself use connection::errmsg().
         const char* errstr() const noexcept;
 
     private:
@@ -129,7 +129,7 @@ namespace native
         return lhs.primary() != rhs;
     }
 
-    // An exact match: SQLITE_CONSTRAINT_UNIQUE equals extended_code::constraint_unique and nothing else
+    /// An exact match: SQLITE_CONSTRAINT_UNIQUE equals extended_code::constraint_unique and nothing else
     constexpr bool operator==(
         result lhs,
         extended_code rhs

@@ -8,13 +8,13 @@
 
 namespace sqlitexx
 {
-// What went wrong: a SQLite result code (extended) and the message that came with it.
-//
-// Errors sqlitexx finds itself use SQLite codes too, so one kind of check covers both:
-//  - primary_code::done      a query that had to produce a row produced none (statement::first)
-//  - primary_code::mismatch  a value does not fit the C++ type: NULL read into a non-optional type, or an integer
-//                            out of the type's range
-//  - primary_code::misuse    the API was used wrongly, for example prepare() given no statement or several
+/// What went wrong: a SQLite result code (extended) and the message that came with it.
+///
+/// Errors sqlitexx finds itself use SQLite codes too, so one kind of check covers both:
+///  - primary_code::done      a query that had to produce a row produced none (statement::first)
+///  - primary_code::mismatch  a value does not fit the C++ type: NULL read into a non-optional type, or an integer
+///                            out of the type's range
+///  - primary_code::misuse    the API was used wrongly, for example prepare() given no statement or several
 class error final
 {
 public:

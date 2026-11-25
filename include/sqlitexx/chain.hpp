@@ -1,22 +1,23 @@
 #ifndef SQLITEXX_CHAIN_HPP
 #define SQLITEXX_CHAIN_HPP
 
-// Building blocks for chaining expected<...> results:
-//
-//     auto age = db.prepare("SELECT age FROM user WHERE name = ?")
-//         .and_then(sqlitexx::bind_values("Alice"))
-//         .and_then(sqlitexx::first<int>())
-//         .or_else(sqlitexx::on(native::primary_code::done, [](const sqlitexx::error&) {
-//             return sqlitexx::expected<int>(0); // no such user
-//         }));
-//
-// bind_values / first / for_each_row / execute_with are steps for and_then on an expected<statement>. on() handles
-// one kind of error in or_else (a native::primary_code, or a native::extended_code such as constraint_unique) and
-// passes every other error on unchanged.
-//
-// The steps own what they are given: bind_values, execute_with, for_each_row and on() take it by value and move it in,
-// so a step never refers to anything outside itself. Passing an lvalue copies it where the call is made, in the
-// caller's code; the calls themselves only move, and are noexcept when moving cannot throw.
+/// \file
+/// Building blocks for chaining expected<...> results:
+///
+///     auto age = db.prepare("SELECT age FROM user WHERE name = ?")
+///         .and_then(sqlitexx::bind_values("Alice"))
+///         .and_then(sqlitexx::first<int>())
+///         .or_else(sqlitexx::on(native::primary_code::done, [](const sqlitexx::error&) {
+///             return sqlitexx::expected<int>(0); // no such user
+///         }));
+///
+/// bind_values / first / for_each_row / execute_with are steps for and_then on an expected<statement>. on() handles
+/// one kind of error in or_else (a native::primary_code, or a native::extended_code such as constraint_unique) and
+/// passes every other error on unchanged.
+///
+/// The steps own what they are given: bind_values, execute_with, for_each_row and on() take it by value and move it in,
+/// so a step never refers to anything outside itself. Passing an lvalue copies it where the call is made, in the
+/// caller's code; the calls themselves only move, and are noexcept when moving cannot throw.
 
 #include "sqlitexx/detail/utility.hpp"
 #include "sqlitexx/error.hpp"
@@ -126,7 +127,7 @@ namespace detail
         std::tuple<Args...> args;
     };
 
-    // Predicates for error_handler
+    /// Predicates for error_handler
     struct has_primary_code
     {
         native::primary_code code;
@@ -147,14 +148,14 @@ namespace detail
         }
     };
 
-    // Calls `handler` for errors `predicate` accepts and passes every other error on
+    /// Calls `handler` for errors `predicate` accepts and passes every other error on
     template <class Predicate, class Handler>
     struct error_handler
     {
         Predicate predicate;
         Handler handler;
 
-        // The handler's return type is the chain's type, so a non-matching error is passed on in that type.
+        /// The handler's return type is the chain's type, so a non-matching error is passed on in that type.
         template <class E>
         auto operator()(E&& e) const -> decltype(std::declval<const Handler&>()(std::declval<const error&>()))
         {
@@ -168,7 +169,7 @@ namespace detail
     };
 } // detail
 
-// and_then step: binds the values to parameters 1, 2, 3, ... and passes the statement on.
+/// and_then step: binds the values to parameters 1, 2, 3, ... and passes the statement on.
 template <class... Args>
 SQLITEXX_DETAIL_NODISCARD detail::bind_step<Args...> bind_values(Args... values) noexcept(
     detail::all_of<std::is_nothrow_move_constructible<Args>...>::value
@@ -177,14 +178,14 @@ SQLITEXX_DETAIL_NODISCARD detail::bind_step<Args...> bind_values(Args... values)
     return detail::bind_step<Args...>(std::move(values)...);
 }
 
-// and_then step: steps once and reads the row (statement::first).
+/// and_then step: steps once and reads the row (statement::first).
 template <class... T>
 SQLITEXX_DETAIL_NODISCARD detail::first_step<T...> first()
 {
     return detail::first_step<T...>();
 }
 
-// and_then step: calls `callback` with every row (statement::for_each).
+/// and_then step: calls `callback` with every row (statement::for_each).
 template <
     class... T,
     class Callback>
@@ -196,7 +197,7 @@ for_each_row(Callback callback) noexcept(std::is_nothrow_move_constructible<Call
     return detail::for_each_step<Callback, T...>{std::move(callback)};
 }
 
-// and_then step: binds the values and runs the statement to completion (statement::execute).
+/// and_then step: binds the values and runs the statement to completion (statement::execute).
 template <class... Args>
 SQLITEXX_DETAIL_NODISCARD detail::execute_step<Args...> execute_with(Args... values) noexcept(
     detail::all_of<std::is_nothrow_move_constructible<Args>...>::value
@@ -205,7 +206,7 @@ SQLITEXX_DETAIL_NODISCARD detail::execute_step<Args...> execute_with(Args... val
     return detail::execute_step<Args...>(std::move(values)...);
 }
 
-// or_else handler for errors with this primary code (any extended code under it); other errors pass through.
+/// or_else handler for errors with this primary code (any extended code under it); other errors pass through.
 template <class Handler>
 SQLITEXX_DETAIL_NODISCARD detail::error_handler<
     detail::has_primary_code,
@@ -219,7 +220,7 @@ on(native::primary_code code,
     };
 }
 
-// or_else handler for errors with exactly this extended code, for example native::extended_code::constraint_unique.
+/// or_else handler for errors with exactly this extended code, for example native::extended_code::constraint_unique.
 template <class Handler>
 SQLITEXX_DETAIL_NODISCARD detail::error_handler<
     detail::has_extended_code,
@@ -233,8 +234,8 @@ on(native::extended_code code,
     };
 }
 
-// or_else handler for errors with exactly this extended code given as a number, for a code that
-// native::extended_code doesn't list yet.
+/// or_else handler for errors with exactly this extended code given as a number, for a code that
+/// native::extended_code doesn't list yet.
 template <class Handler>
 SQLITEXX_DETAIL_NODISCARD detail::error_handler<
     detail::has_extended_code,

@@ -42,6 +42,25 @@ directories are kept in `~/.cache/sqlitexx-check`, so a second run only rebuilds
 Windows checkout (`wsl --cd /mnt/c/<path to sqlitexx> -e bash tools/check.sh`); the builds still go to the Linux
 file system, where they are fast.
 
+### The reference
+
+The [API reference](https://lallerhun.github.io/sqlitexx/) is generated from the `///` comments in the headers by
+Doxygen, with the doxygen-awesome-css theme. [tools/docs.sh](tools/docs.sh) builds it into `build/docs/html`, the
+same way the [docs workflow](.github/workflows/docs.yml) does:
+
+```shell
+tools/docs.sh                          # doxygen from PATH
+DOXYGEN=/path/to/doxygen tools/docs.sh # or a given one; CI uses the official 1.15.0 release
+```
+
+Every pull request builds it, and a Doxygen warning fails the build. Pushes to `main`, which means releases, publish
+it to GitHub Pages.
+
+Doc comments use `///` and document the declaration right below them; the first sentence is the summary. A header's
+opening comment starts with `/// \file` and becomes its file page. Section labels in a class are member groups:
+`/// \name Statements`, the group's description, then `///@{` and `///@}` around its members. Plain `//` comments
+are for the implementation and stay out of the reference.
+
 ## Where things go
 
 | Path | What |
@@ -54,6 +73,8 @@ file system, where they are fast.
 | `src/impl_sqlitexx.hpp` | The implementation files' single include. It only includes other headers. |
 | `tests/` | One test program per area (`native_test`, `typed_test`, ...). |
 | `examples/` | Programs shown in the README. CI builds and runs them, so keep them in step with the README. |
+| `docs/` | The Doxygen configuration of the API reference (see [The reference](#the-reference)). |
+| `tools/` | Scripts for contributors: `check.sh` runs the CI jobs, `docs.sh` builds the reference. |
 
 A new declaration gets its own header, named after it, rather than being added to an unrelated one.
 

@@ -1,0 +1,61 @@
+name: Docs
+
+# The API reference: built for every pull request, so a broken doc comment fails early, and published to GitHub Pages
+# from main, so the reference matches the latest release.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Pull requests cancel their older runs; a deployment from main is never cut off halfway
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  DOXYGEN_VERSION: 1.15.0
+  DOXYGEN_SHA256: 0ec2e5b2c3cd82b7106d19cb42d8466450730b8cb7a9e85af712be38bf4523a1
+
+jobs:
+  build:
+    name: Reference
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # The official release, checked against its hash: the distributions' packages lag behind
+      - name: Install Doxygen
+        run: |
+          curl -sSLf -o "$RUNNER_TEMP/doxygen.tar.gz" \
+            "https://www.doxygen.nl/files/doxygen-${DOXYGEN_VERSION}.linux.bin.tar.gz"
+          echo "${DOXYGEN_SHA256}  $RUNNER_TEMP/doxygen.tar.gz" | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/doxygen.tar.gz" -C "$RUNNER_TEMP"
+          echo "DOXYGEN=$RUNNER_TEMP/doxygen-${DOXYGEN_VERSION}/bin/doxygen" >> "$GITHUB_ENV"
+
+      - name: Build the reference
+        run: tools/docs.sh
+
+      - name: Upload for GitHub Pages
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/docs/html
+
+  deploy:
+    name: Publish
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

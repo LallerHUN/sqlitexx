@@ -1,10 +1,11 @@
 #ifndef SQLITEXX_DETAIL_BYTE_CONTAINER_HPP
 #define SQLITEXX_DETAIL_BYTE_CONTAINER_HPP
 
-// Which containers hold raw bytes, recognised by their members so that it works in every standard: std::vector,
-// std::string, std::array and (C++20) std::span of char, signed char, unsigned char, std::byte (C++17) or char8_t
-// (C++20). Containers of wider elements are left out on purpose: their bytes depend on the machine's integer size and
-// byte order.
+/// \file
+/// Which containers hold raw bytes, recognised by their members so that it works in every standard: std::vector,
+/// std::string, std::array and (C++20) std::span of char, signed char, unsigned char, std::byte (C++17) or char8_t
+/// (C++20). Containers of wider elements are left out on purpose: their bytes depend on the machine's integer size and
+/// byte order.
 
 #include "sqlitexx/detail/utility.hpp"
 #include <cstddef>
@@ -53,7 +54,7 @@ namespace detail
     template <class Pointer>
     using pointee = typename std::remove_pointer<Pointer>::type;
 
-    // Bytes to write: data() and size() on a const container, pointing to bytes
+    /// Bytes to write: data() and size() on a const container, pointing to bytes
     template <class C, class = void>
     struct is_readable_bytes : std::false_type
     {
@@ -67,7 +68,7 @@ namespace detail
     {
     };
 
-    // A container to read into that grows to fit: resize(), size() and operator[] giving a writable byte
+    /// A container to read into that grows to fit: resize(), size() and operator[] giving a writable byte
     template <class C, class = void>
     struct is_growable_bytes : std::false_type
     {
@@ -88,7 +89,7 @@ namespace detail
     {
     };
 
-    // A fixed-size buffer to read into: data() pointing to writable bytes and size(), but no resize()
+    /// A fixed-size buffer to read into: data() pointing to writable bytes and size(), but no resize()
     template <class C, class = void>
     struct is_fixed_bytes : std::false_type
     {
@@ -105,7 +106,7 @@ namespace detail
     {
     };
 
-    // C arrays to write from. Arrays of char and char8_t are left out: a string literal would write its '\0' too.
+    /// C arrays to write from. Arrays of char and char8_t are left out: a string literal would write its '\0' too.
     template <class T>
     struct is_byte_array_element : std::integral_constant<bool, is_byte<T>::value && !std::is_same<T, char>::value>
     {

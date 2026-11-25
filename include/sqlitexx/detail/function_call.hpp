@@ -1,8 +1,9 @@
 #ifndef SQLITEXX_DETAIL_FUNCTION_CALL_HPP
 #define SQLITEXX_DETAIL_FUNCTION_CALL_HPP
 
-// What SQLite calls for an SQL function made from a C++ callable: it reads the arguments with value_traits, calls the
-// callable and turns what it returns into the result or the error of the call.
+/// \file
+/// What SQLite calls for an SQL function made from a C++ callable: it reads the arguments with value_traits, calls the
+/// callable and turns what it returns into the result or the error of the call.
 
 #include "sqlitexx/config.hpp"
 #include "sqlitexx/detail/registration_block.hpp"
@@ -17,7 +18,7 @@ namespace sqlitexx
 {
 namespace detail
 {
-    // Storage: how user_data holds the callable (owned_by_sqlite, or shared_with_token through a registrations token)
+    /// Storage: how user_data holds the callable (owned_by_sqlite, or shared_with_token through a registrations token)
     template <class F, class Storage = owned_by_sqlite<F>>
     class function_caller
     {

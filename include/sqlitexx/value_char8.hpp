@@ -1,9 +1,10 @@
 #ifndef SQLITEXX_VALUE_CHAR8_HPP
 #define SQLITEXX_VALUE_CHAR8_HPP
 
-// UTF-8 text as char8_t (C++20): u8"..." literals, std::u8string, std::u8string_view and u8cstring_view bind and read
-// as text, like their char counterparts. Before C++20 this header declares nothing, so it is safe to include in every
-// standard; sqlitexx/value.hpp includes it.
+/// \file
+/// UTF-8 text as char8_t (C++20): u8"..." literals, std::u8string, std::u8string_view and u8cstring_view bind and read
+/// as text, like their char counterparts. Before C++20 this header declares nothing, so it is safe to include in every
+/// standard; sqlitexx/value.hpp includes it.
 
 #include "sqlitexx/value.hpp"
 
@@ -17,21 +18,21 @@ namespace sqlitexx
 {
 namespace detail
 {
-    // SQLite stores UTF-8 as char; char may view any object, so char8_t text can go in as char.
+    /// SQLite stores UTF-8 as char; char may view any object, so char8_t text can go in as char.
     inline string_view as_char_text(std::u8string_view text) noexcept
     {
         return string_view(reinterpret_cast<const char*>(text.data()), text.size());
     }
 
-    // SQLite's text viewed as char8_t, the way UTF-8 libraries view char buffers. Owning copies are made with memcpy
-    // instead (see value_traits<std::u8string>).
+    /// SQLite's text viewed as char8_t, the way UTF-8 libraries view char buffers. Owning copies are made with memcpy
+    /// instead (see value_traits<std::u8string>).
     inline const char8_t* as_char8_text(const char* text) noexcept
     {
         return reinterpret_cast<const char8_t*>(text);
     }
 } // detail
 
-// Binding only, like const char*: binds NULL for a null pointer.
+/// Binding only, like const char*: binds NULL for a null pointer.
 template <>
 struct value_traits<const char8_t*>
 {
@@ -93,7 +94,7 @@ struct value_traits<std::u8string>
     }
 };
 
-// Reading gives a view into SQLite's memory: valid until the next step(), reset() or finalize().
+/// Reading gives a view into SQLite's memory: valid until the next step(), reset() or finalize().
 template <>
 struct value_traits<std::u8string_view>
 {
@@ -122,7 +123,7 @@ struct value_traits<std::u8string_view>
     }
 };
 
-// Like std::u8string_view, and always followed by a '\0', so c_str() can go to C functions.
+/// Like std::u8string_view, and always followed by a '\0', so c_str() can go to C functions.
 template <>
 struct value_traits<u8cstring_view>
 {

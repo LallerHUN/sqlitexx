@@ -32,17 +32,17 @@ namespace detail
     };
 } // detail
 
-// What reading a row gives: the value itself for one column, a std::tuple for several.
+/// What reading a row gives: the value itself for one column, a std::tuple for several.
 template <class... T>
 using row = typename detail::row_type<T...>::type;
 
 template <class... T>
 class rows_range;
 
-// A prepared statement with typed binding and reading. Move-only. Every operation that can fail returns
-// expected<...>, so calls chain with and_then / or_else / transform. Running out of memory is a primary_code::nomem
-// error, never std::bad_alloc. The calls that bind or read values are noexcept when the value_traits of their types
-// are, as the built-in ones are; exceptions from other traits pass through unchanged (see sqlitexx/value.hpp).
+/// A prepared statement with typed binding and reading. Move-only. Every operation that can fail returns
+/// expected<...>, so calls chain with and_then / or_else / transform. Running out of memory is a primary_code::nomem
+/// error, never std::bad_alloc. The calls that bind or read values are noexcept when the value_traits of their types
+/// are, as the built-in ones are; exceptions from other traits pass through unchanged (see sqlitexx/value.hpp).
 class statement final
 {
 public:
@@ -56,8 +56,10 @@ public:
     statement(const statement&) = delete;
     statement& operator=(const statement&) = delete;
 
-    // Binding. bind() binds its arguments to parameters 1, 2, 3, ... in order. On a temporary statement it gives
-    // the statement back, ready for the next step in a chain.
+    /// \name Binding
+    /// bind() binds its arguments to parameters 1, 2, 3, ... in order. On a temporary statement it gives
+    /// the statement back, ready for the next step in a chain.
+    ///@{
     template <class... Args>
     SQLITEXX_DETAIL_NODISCARD expected<void> bind(const Args&... args) & noexcept(
         detail::all_bind_noexcept<Args...>::value
@@ -87,8 +89,9 @@ public:
     {
         return check(value_traits<typename std::decay<T>::type>::bind(stmt, index, value));
     }
+    ///@}
 
-    // The name includes its prefix: ":id", "@id" or "$id".
+    /// The name includes its prefix: ":id", "@id" or "$id".
     template <class T>
     SQLITEXX_DETAIL_NODISCARD expected<void> bind_named(
         const char* name,
@@ -103,12 +106,15 @@ public:
         return bind_at(index, value);
     }
 
-    // Running. step() gives true when a row is ready and false when the statement has finished.
+    /// \name Running
+    /// step() gives true when a row is ready and false when the statement has finished.
+    ///@{
     SQLITEXX_DETAIL_NODISCARD expected<bool> step() noexcept;
     SQLITEXX_DETAIL_NODISCARD expected<void> reset() noexcept;
+    ///@}
 
-    // Resets, binds the arguments (all earlier bindings are cleared first) and runs to completion; rows are
-    // discarded. Suits INSERT, UPDATE, DELETE and DDL, and runs the same statement again with new values.
+    /// Resets, binds the arguments (all earlier bindings are cleared first) and runs to completion; rows are
+    /// discarded. Suits INSERT, UPDATE, DELETE and DDL, and runs the same statement again with new values.
     template <class... Args>
     SQLITEXX_DETAIL_NODISCARD expected<void> execute(const Args&... args) noexcept(
         detail::all_bind_noexcept<Args...>::value
@@ -134,7 +140,7 @@ public:
         }
     }
 
-    // Steps once and reads the row. A query that produces no row gives a primary_code::done error.
+    /// Steps once and reads the row. A query that produces no row gives a primary_code::done error.
     template <class... T>
     SQLITEXX_DETAIL_NODISCARD expected<row<T...>> first() noexcept(detail::row_reads_noexcept<T...>::value)
     {
@@ -150,7 +156,7 @@ public:
         return read_row<T...>();
     }
 
-    // Steps through all rows and calls `callback` with each row's values: callback(T1, T2, ...).
+    /// Steps through all rows and calls `callback` with each row's values: callback(T1, T2, ...).
     template <
         class... T,
         class F>
@@ -176,24 +182,24 @@ public:
         }
     }
 
-    // The rows as a range of expected<row<T...>>, for a range-based for loop (see sqlitexx/rows.hpp). Not on a
-    // temporary statement: it would be gone before the loop body runs.
+    /// The rows as a range of expected<row<T...>>, for a range-based for loop (see sqlitexx/rows.hpp). Not on a
+    /// temporary statement: it would be gone before the loop body runs.
     template <class... T>
     rows_range<T...> rows() &;
 
     template <class... T>
     void rows() && = delete;
 
-    // Reading the current row (indexes count from 0)
+    /// Reading the current row (indexes count from 0)
     template <class T>
     SQLITEXX_DETAIL_NODISCARD expected<T> column(int index) const noexcept(detail::reads_noexcept<T>::value)
     {
         return read_column<T>(index, detail::is_optional<T>());
     }
 
-    // By name: the first column with this name, compared like SQL identifiers (ASCII letters in either case). A
-    // column's name is its AS alias, or else what SQLite makes of the expression, so give computed columns an alias.
-    // Each call searches the columns: in a loop, look the index up once with column_index().
+    /// By name: the first column with this name, compared like SQL identifiers (ASCII letters in either case). A
+    /// column's name is its AS alias, or else what SQLite makes of the expression, so give computed columns an alias.
+    /// Each call searches the columns: in a loop, look the index up once with column_index().
     template <class T>
     SQLITEXX_DETAIL_NODISCARD expected<T> column(string_view name) const noexcept(detail::reads_noexcept<T>::value)
     {
@@ -205,7 +211,7 @@ public:
         return column<T>(*index);
     }
 
-    // The index of the first column with this name; a primary_code::range error when there is none.
+    /// The index of the first column with this name; a primary_code::range error when there is none.
     SQLITEXX_DETAIL_NODISCARD expected<int> column_index(string_view name) const noexcept;
 
     template <class... T>
@@ -214,14 +220,14 @@ public:
         return read_row_impl<T...>(std::integral_constant<bool, sizeof...(T) == 1>());
     }
 
-    // The native statement underneath, for what the typed layer does not cover
+    /// The native statement underneath, for what the typed layer does not cover
     native::statement& native_statement() noexcept;
     const native::statement& native_statement() const noexcept;
 
 private:
     native::statement stmt;
 
-    // Errors
+    /// Errors
     error failure(native::result code) const noexcept;
     error no_rows() const noexcept;
     error no_parameter(const char* name) const noexcept;
@@ -237,7 +243,7 @@ private:
         return {};
     }
 
-    // Binding
+    /// Binding
     void restart() noexcept;
 
     expected<void> bind_from(int) noexcept
@@ -265,7 +271,7 @@ private:
         return bind_from(index + 1, rest...);
     }
 
-    // Reading
+    /// Reading
     template <class T>
     expected<T> read_column(
         int index,
