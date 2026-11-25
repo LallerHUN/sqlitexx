@@ -40,6 +40,7 @@
 
 #include "sqlitexx/database.hpp"
 #include "sqlitexx/detail/aggregate_call.hpp"
+#include "sqlitexx/detail/out_of_memory.hpp"
 
 #include <new>
 #include <type_traits>
@@ -50,11 +51,11 @@ namespace sqlitexx
 template <class Aggregate>
 expected<void> database::create_aggregate(
     cstring_view name,
-    Aggregate&& prototype,
+    Aggregate prototype,
     native::function_flags flags
-)
+) noexcept(std::is_nothrow_move_constructible<Aggregate>::value)
 {
-    using stored = typename std::decay<Aggregate>::type;
+    using stored = Aggregate;
     static_assert(
         detail::is_aggregate_class<stored>::value,
         "an aggregate class has a step(...) member for each row and a finish() member for the result"
@@ -65,19 +66,17 @@ expected<void> database::create_aggregate(
     {
         return expected<void>(
             unexpect,
-            error(
+            detail::error_with(
                 native::result(static_cast<int>(native::primary_code::misuse)),
                 "create_aggregate() needs an open database"
             )
         );
     }
-    stored* owned = new (std::nothrow) stored(std::forward<Aggregate>(prototype));
+    // Running out of memory for SQLite's copy is an error; moving into it is the user's type's work
+    stored* owned = new (std::nothrow) stored(std::move(prototype));
     if (owned == nullptr)
     {
-        return expected<void>(
-            unexpect,
-            error(native::result(static_cast<int>(native::primary_code::nomem)), "out of memory copying the aggregate")
-        );
+        return expected<void>(unexpect, detail::out_of_memory());
     }
 
     // From here SQLite owns the prototype: it calls destroy when it is done with it, also when registering fails

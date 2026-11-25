@@ -72,19 +72,24 @@ struct value_traits<std::u8string>
     static expected<std::u8string> read(
         const Source& stmt,
         int index
-    )
+    ) noexcept
     {
-        const expected<cstring_view> text = detail::read_text(stmt, index);
+        expected<cstring_view> text = detail::read_text(stmt, index);
         if (!text)
         {
-            return expected<std::u8string>(unexpect, text.error());
+            return expected<std::u8string>(unexpect, std::move(text.error()));
         }
-        std::u8string copy(text->size(), u8'\0');
-        if (!copy.empty())
-        {
-            std::memcpy(copy.data(), text->data(), text->size());
-        }
-        return copy;
+        return detail::allocation_guard(
+            [&]() -> expected<std::u8string>
+            {
+                std::u8string copy(text->size(), u8'\0');
+                if (!copy.empty())
+                {
+                    std::memcpy(copy.data(), text->data(), text->size());
+                }
+                return copy;
+            }
+        );
     }
 };
 
@@ -106,12 +111,12 @@ struct value_traits<std::u8string_view>
     static expected<std::u8string_view> read(
         const Source& stmt,
         int index
-    )
+    ) noexcept
     {
-        const expected<cstring_view> text = detail::read_text(stmt, index);
+        expected<cstring_view> text = detail::read_text(stmt, index);
         if (!text)
         {
-            return expected<std::u8string_view>(unexpect, text.error());
+            return expected<std::u8string_view>(unexpect, std::move(text.error()));
         }
         return std::u8string_view(detail::as_char8_text(text->data()), text->size());
     }
@@ -135,12 +140,12 @@ struct value_traits<u8cstring_view>
     static expected<u8cstring_view> read(
         const Source& stmt,
         int index
-    )
+    ) noexcept
     {
-        const expected<cstring_view> text = detail::read_text(stmt, index);
+        expected<cstring_view> text = detail::read_text(stmt, index);
         if (!text)
         {
-            return expected<u8cstring_view>(unexpect, text.error());
+            return expected<u8cstring_view>(unexpect, std::move(text.error()));
         }
         return u8cstring_view::assume_terminated(detail::as_char8_text(text->c_str()), text->size());
     }

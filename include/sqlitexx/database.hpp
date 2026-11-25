@@ -34,13 +34,13 @@ public:
     static expected<database> open(
         const char* filename,
         native::open_flags flags = native::open_flags::default_rw
-    );
+    ) noexcept;
 
     // Statements. execute() runs one or more semicolon-separated statements and discards their rows. prepare()
     // takes exactly one statement: SQL holding none, or several, is a primary_code::misuse error rather than
     // silently ignoring the rest.
-    expected<void> execute(const char* sql);
-    expected<statement> prepare(string_view sql);
+    expected<void> execute(const char* sql) noexcept;
+    expected<statement> prepare(string_view sql) noexcept;
 
     // State
     std::int64_t last_insert_rowid() const noexcept;
@@ -50,7 +50,7 @@ public:
     // primary_code::busy. Zero or less turns waiting off, as it is when a database opens. A timeout longer than SQLite
     // takes (INT_MAX milliseconds, about 24.8 days) waits that long. Coarser durations convert:
     // std::chrono::seconds(5).
-    expected<void> busy_timeout(std::chrono::milliseconds timeout);
+    expected<void> busy_timeout(std::chrono::milliseconds timeout) noexcept;
 
     // Backup (see sqlitexx/backup.hpp): copies this database over `destination`, replacing everything in it.
     // backup_to() copies all at once; begin_backup_to() gives a backup to copy in steps. The schemas are "main",
@@ -59,12 +59,12 @@ public:
         database& destination,
         cstring_view source_schema = "main",
         cstring_view destination_schema = "main"
-    );
+    ) noexcept;
     expected<backup> begin_backup_to(
         database& destination,
         cstring_view source_schema = "main",
         cstring_view destination_schema = "main"
-    );
+    ) noexcept;
 
     // Incremental blob I/O (see sqlitexx/blob_stream.hpp): opens the value in `column` of the row `rowid` of `table`
     // for reading and writing in pieces. The value must be a blob or text; NULL and numbers cannot be opened.
@@ -74,25 +74,25 @@ public:
         std::int64_t rowid,
         blob_access access = blob_access::read_only,
         cstring_view schema = "main"
-    );
+    ) noexcept;
 
     // SQL functions written in C++, with the parameters and return type of `function` (see sqlitexx/function.hpp).
     // Registering the same name with the same number of parameters again replaces the function.
     template <class F>
     expected<void> create_function(
         cstring_view name,
-        F&& function,
+        F function,
         native::function_flags flags = native::function_flags::none
-    );
+    ) noexcept(std::is_nothrow_move_constructible<F>::value);
 
     // Aggregate functions written in C++, from a class with step(...) and finish() members; with inverse(...) and
     // value() also a window function (see sqlitexx/aggregate.hpp). Each group works on its own copy of `prototype`.
     template <class Aggregate>
     expected<void> create_aggregate(
         cstring_view name,
-        Aggregate&& prototype,
+        Aggregate prototype,
         native::function_flags flags = native::function_flags::none
-    );
+    ) noexcept(std::is_nothrow_move_constructible<Aggregate>::value);
 
     // The native connection underneath, for what the typed layer does not cover
     native::connection& native_connection() noexcept;
@@ -103,7 +103,7 @@ private:
 
     explicit database(native::connection&& opened) noexcept;
 
-    error failure(native::result code) const;
+    error failure(native::result code) const noexcept;
 
     template <class Caller>
     native::result register_aggregate(

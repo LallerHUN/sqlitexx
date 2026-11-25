@@ -32,6 +32,7 @@
 
 #include "sqlitexx/config.hpp"
 #include "sqlitexx/detail/byte_container.hpp"
+#include "sqlitexx/detail/out_of_memory.hpp"
 #include "sqlitexx/error.hpp"
 #include "sqlitexx/expected.hpp"
 #include "sqlitexx/native/blob_handle.hpp"
@@ -73,14 +74,14 @@ public:
     std::size_t position() const noexcept;
 
     // Moves the position; past the end is a primary_code::range error and leaves the position as it was.
-    expected<void> seek(std::size_t offset);
+    expected<void> seek(std::size_t offset) noexcept;
 
     // Reads up to `count` bytes from the position into `buffer` and moves past them. Gives the number of bytes read:
     // fewer than `count` near the end, 0 at the end.
     expected<std::size_t> read(
         void* buffer,
         std::size_t count
-    );
+    ) noexcept;
 
     // Reads into a container that grows to fit (std::vector, std::string): the rest of the blob, or with `count`, at
     // most that many bytes. Gives the number of bytes read; the container ends up that size, and empty on an error.
@@ -171,7 +172,7 @@ public:
     expected<void> write(
         const void* data,
         std::size_t count
-    );
+    ) noexcept;
 
     // Writes a contiguous container of bytes (std::vector, std::string, std::array, std::span, string_view, ...): all
     // of it, or its first `count` bytes. C arrays work too, except arrays of char and char8_t: a string literal would
@@ -233,10 +234,10 @@ public:
     }
 
     // Moves to the same column of another row, much faster than opening again. The position goes back to 0.
-    expected<void> reopen(std::int64_t rowid);
+    expected<void> reopen(std::int64_t rowid) noexcept;
 
     // Closes the blob now and reports any error; the destructor closes it too, without a report.
-    expected<void> close();
+    expected<void> close() noexcept;
 
     // The native blob underneath, for what the typed layer does not cover
     native::blob_handle& native_blob() noexcept;
@@ -254,12 +255,12 @@ private:
         sqlite3* connection
     ) noexcept;
 
-    error failure(native::result code) const;
-    error not_open() const;
+    error failure(native::result code) const noexcept;
+    error not_open() const noexcept;
     error too_many(
         std::size_t count,
         std::size_t available
-    ) const;
+    ) const noexcept;
 
     template <class Bytes>
     expected<std::size_t> read_growing(
@@ -267,19 +268,24 @@ private:
         std::size_t count
     )
     {
-        if (!blob)
-        {
-            out.resize(0);
-            return expected<std::size_t>(unexpect, not_open());
-        }
-        const std::size_t left = length - offset;
-        const std::size_t wanted = count < left ? count : left;
-        out.resize(wanted);
-        if (wanted == 0)
-        {
-            return std::size_t(0);
-        }
-        expected<std::size_t> got = read(static_cast<void*>(&out[0]), wanted);
+        // Growing the container may run out of memory
+        expected<std::size_t> got = detail::allocation_guard(
+            [&]() -> expected<std::size_t>
+            {
+                if (!blob)
+                {
+                    return expected<std::size_t>(unexpect, not_open());
+                }
+                const std::size_t left = length - offset;
+                const std::size_t wanted = count < left ? count : left;
+                out.resize(wanted);
+                if (wanted == 0)
+                {
+                    return std::size_t(0);
+                }
+                return read(static_cast<void*>(&out[0]), wanted);
+            }
+        );
         if (!got)
         {
             out.resize(0);

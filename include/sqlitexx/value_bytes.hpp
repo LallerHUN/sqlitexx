@@ -47,7 +47,7 @@ struct value_traits<std::vector<std::byte>>
     static expected<std::vector<std::byte>> read(
         const Source& stmt,
         int index
-    )
+    ) noexcept
     {
         const std::byte* data = static_cast<const std::byte*>(stmt.column_blob(index));
         const std::size_t size = stmt.column_bytes(index);
@@ -55,7 +55,12 @@ struct value_traits<std::vector<std::byte>>
         {
             return std::vector<std::byte>();
         }
-        return std::vector<std::byte>(data, data + size);
+        return detail::allocation_guard(
+            [&]() -> expected<std::vector<std::byte>>
+            {
+                return std::vector<std::byte>(data, data + size);
+            }
+        );
     }
 };
 
@@ -101,7 +106,7 @@ struct value_traits<
     static expected<span> read(
         const Source& stmt,
         int index
-    )
+    ) noexcept
     {
         static_assert(
             std::is_const_v<Byte> && Extent == std::dynamic_extent,

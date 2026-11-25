@@ -49,12 +49,15 @@ transaction::~transaction()
 expected<transaction> transaction::begin(
     database& target,
     transaction_mode mode
-)
+) noexcept
 {
     sqlite3* handle = target.native_connection().handle();
     if (handle == nullptr)
     {
-        return expected<transaction>(unexpect, error(native::result(SQLITE_MISUSE), "the database is not open"));
+        return expected<transaction>(
+            unexpect,
+            detail::error_with(native::result(SQLITE_MISUSE), "the database is not open")
+        );
     }
 
     const native::result code(sqlite3_exec(handle, begin_sql(mode), nullptr, nullptr, nullptr));
@@ -65,12 +68,12 @@ expected<transaction> transaction::begin(
     return transaction(handle);
 }
 
-expected<void> transaction::commit()
+expected<void> transaction::commit() noexcept
 {
     return finish("COMMIT");
 }
 
-expected<void> transaction::rollback()
+expected<void> transaction::rollback() noexcept
 {
     return finish("ROLLBACK");
 }
@@ -80,11 +83,14 @@ bool transaction::active() const noexcept
     return db != nullptr;
 }
 
-expected<void> transaction::finish(const char* sql)
+expected<void> transaction::finish(const char* sql) noexcept
 {
     if (db == nullptr)
     {
-        return expected<void>(unexpect, error(native::result(SQLITE_MISUSE), "the transaction has already ended"));
+        return expected<void>(
+            unexpect,
+            detail::error_with(native::result(SQLITE_MISUSE), "the transaction has already ended")
+        );
     }
 
     const native::result code(sqlite3_exec(db, sql, nullptr, nullptr, nullptr));
@@ -97,7 +103,7 @@ expected<void> transaction::finish(const char* sql)
         {
             db = nullptr;
         }
-        return expected<void>(unexpect, failure);
+        return expected<void>(unexpect, std::move(failure));
     }
 
     db = nullptr;

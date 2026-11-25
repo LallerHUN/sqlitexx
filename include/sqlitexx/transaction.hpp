@@ -51,10 +51,10 @@ public:
     static expected<transaction> begin(
         database& target,
         transaction_mode mode = transaction_mode::deferred
-    );
+    ) noexcept;
 
-    expected<void> commit();
-    expected<void> rollback();
+    expected<void> commit() noexcept;
+    expected<void> rollback() noexcept;
 
     // True until commit() or rollback() ends the transaction, or SQLite rolls it back itself
     bool active() const noexcept;
@@ -64,7 +64,7 @@ private:
 
     explicit transaction(sqlite3* handle) noexcept;
 
-    expected<void> finish(const char* sql);
+    expected<void> finish(const char* sql) noexcept;
     void rollback_if_open() noexcept;
 };
 
@@ -88,7 +88,7 @@ auto in_transaction(
     expected<transaction> tx = transaction::begin(db, mode);
     if (!tx)
     {
-        return result_type(unexpect, tx.error());
+        return result_type(unexpect, std::move(tx.error()));
     }
 
     result_type result = std::forward<F>(body)();
@@ -100,7 +100,7 @@ auto in_transaction(
     expected<void> committed = tx->commit();
     if (!committed)
     {
-        return result_type(unexpect, committed.error());
+        return result_type(unexpect, std::move(committed.error()));
     }
     return result;
 }

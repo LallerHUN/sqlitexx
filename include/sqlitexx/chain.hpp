@@ -13,6 +13,10 @@
 // bind_values / first / for_each_row / execute_with are steps for and_then on an expected<statement>. on() handles
 // one kind of error in or_else (a native::primary_code, or a native::extended_code such as constraint_unique) and
 // passes every other error on unchanged.
+//
+// The steps own what they are given: bind_values, execute_with, for_each_row and on() take it by value and move it in,
+// so a step never refers to anything outside itself. Passing an lvalue copies it where the call is made, in the
+// caller's code; the calls themselves only move, and are noexcept when moving cannot throw.
 
 #include "sqlitexx/detail/utility.hpp"
 #include "sqlitexx/error.hpp"
@@ -33,7 +37,7 @@ namespace detail
     class bind_step
     {
     public:
-        explicit bind_step(Args... values)
+        explicit bind_step(Args... values) noexcept(all_of<std::is_nothrow_move_constructible<Args>...>::value)
             : args(std::move(values)...)
         {
         }
@@ -92,7 +96,7 @@ namespace detail
     class execute_step
     {
     public:
-        explicit execute_step(Args... values)
+        explicit execute_step(Args... values) noexcept(all_of<std::is_nothrow_move_constructible<Args>...>::value)
             : args(std::move(values)...)
         {
         }
@@ -166,9 +170,11 @@ namespace detail
 
 // and_then step: binds the values to parameters 1, 2, 3, ... and passes the statement on.
 template <class... Args>
-detail::bind_step<typename std::decay<Args>::type...> bind_values(Args&&... values)
+detail::bind_step<Args...> bind_values(Args... values) noexcept(
+    detail::all_of<std::is_nothrow_move_constructible<Args>...>::value
+)
 {
-    return detail::bind_step<typename std::decay<Args>::type...>(std::forward<Args>(values)...);
+    return detail::bind_step<Args...>(std::move(values)...);
 }
 
 // and_then step: steps once and reads the row (statement::first).
@@ -183,31 +189,33 @@ template <
     class... T,
     class Callback>
 detail::for_each_step<
-    typename std::decay<Callback>::type,
+    Callback,
     T...>
-for_each_row(Callback&& callback)
+for_each_row(Callback callback) noexcept(std::is_nothrow_move_constructible<Callback>::value)
 {
-    return detail::for_each_step<typename std::decay<Callback>::type, T...>{std::forward<Callback>(callback)};
+    return detail::for_each_step<Callback, T...>{std::move(callback)};
 }
 
 // and_then step: binds the values and runs the statement to completion (statement::execute).
 template <class... Args>
-detail::execute_step<typename std::decay<Args>::type...> execute_with(Args&&... values)
+detail::execute_step<Args...> execute_with(Args... values) noexcept(
+    detail::all_of<std::is_nothrow_move_constructible<Args>...>::value
+)
 {
-    return detail::execute_step<typename std::decay<Args>::type...>(std::forward<Args>(values)...);
+    return detail::execute_step<Args...>(std::move(values)...);
 }
 
 // or_else handler for errors with this primary code (any extended code under it); other errors pass through.
 template <class Handler>
 detail::error_handler<
     detail::has_primary_code,
-    typename std::decay<Handler>::type>
+    Handler>
 on(native::primary_code code,
-   Handler&& handler)
+   Handler handler) noexcept(std::is_nothrow_move_constructible<Handler>::value)
 {
-    return detail::error_handler<detail::has_primary_code, typename std::decay<Handler>::type>{
+    return detail::error_handler<detail::has_primary_code, Handler>{
         detail::has_primary_code{code},
-        std::forward<Handler>(handler),
+        std::move(handler),
     };
 }
 
@@ -215,13 +223,13 @@ on(native::primary_code code,
 template <class Handler>
 detail::error_handler<
     detail::has_extended_code,
-    typename std::decay<Handler>::type>
+    Handler>
 on(native::extended_code code,
-   Handler&& handler)
+   Handler handler) noexcept(std::is_nothrow_move_constructible<Handler>::value)
 {
-    return detail::error_handler<detail::has_extended_code, typename std::decay<Handler>::type>{
+    return detail::error_handler<detail::has_extended_code, Handler>{
         detail::has_extended_code{static_cast<int>(code)},
-        std::forward<Handler>(handler),
+        std::move(handler),
     };
 }
 
@@ -230,13 +238,13 @@ on(native::extended_code code,
 template <class Handler>
 detail::error_handler<
     detail::has_extended_code,
-    typename std::decay<Handler>::type>
+    Handler>
 on(int extended_code,
-   Handler&& handler)
+   Handler handler) noexcept(std::is_nothrow_move_constructible<Handler>::value)
 {
-    return detail::error_handler<detail::has_extended_code, typename std::decay<Handler>::type>{
+    return detail::error_handler<detail::has_extended_code, Handler>{
         detail::has_extended_code{extended_code},
-        std::forward<Handler>(handler),
+        std::move(handler),
     };
 }
 
