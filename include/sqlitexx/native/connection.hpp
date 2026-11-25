@@ -2,8 +2,10 @@
 #define SQLITEXX_NATIVE_CONNECTION_HPP
 
 #include "sqlitexx/config.hpp"
+#include "sqlitexx/native/collation_callback.hpp"
 #include "sqlitexx/native/flags.hpp"
 #include "sqlitexx/native/function_callbacks.hpp"
+#include "sqlitexx/native/hook_callbacks.hpp"
 #include "sqlitexx/native/result.hpp"
 #include "sqlitexx/native/statement.hpp"
 
@@ -107,6 +109,40 @@ namespace native
             final_callback value,
             function_callback inverse,
             destroy_callback destroy
+        ) noexcept;
+
+        // Collations (sqlite3_create_collation_v2 with UTF-8 text), for COLLATE and ORDER BY. A null `compare` removes
+        // the collation. `destroy` (if not null) is called with `user_data` when the collation is replaced or removed
+        // or the connection closes. Unlike create_function, it is not called when this call fails: the caller still
+        // owns `user_data` then. Replacing or removing a collation while statements are running fails with busy.
+        result create_collation(
+            const char* name,
+            void* user_data,
+            compare_callback compare,
+            destroy_callback destroy
+        ) noexcept;
+
+        // Hooks: one of each per connection, each call replacing the one before. A null callback clears the hook.
+        // SQLite keeps `user_data` without owning it (there is no destroy callback); commit_hook, rollback_hook and
+        // update_hook return the previous one. A hook must not modify the connection that runs it, nor prepare or run
+        // statements on it. The progress handler runs every `instructions` virtual machine instructions of a statement
+        // (less than 1 turns it off).
+        void* commit_hook(
+            commit_callback hook,
+            void* user_data
+        ) noexcept;
+        void* rollback_hook(
+            rollback_callback hook,
+            void* user_data
+        ) noexcept;
+        void* update_hook(
+            update_callback hook,
+            void* user_data
+        ) noexcept;
+        void progress_handler(
+            int instructions,
+            progress_callback handler,
+            void* user_data
         ) noexcept;
 
         // Errors of the most recent failed call on this connection

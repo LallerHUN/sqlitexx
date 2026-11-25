@@ -114,7 +114,7 @@ cmake --install build --config Release --prefix <prefix>
 ```
 
 ```cmake
-find_package(sqlitexx 0.3 REQUIRED) # with <prefix> in CMAKE_PREFIX_PATH
+find_package(sqlitexx 0.4 REQUIRED) # with <prefix> in CMAKE_PREFIX_PATH
 target_link_libraries(my_app PRIVATE sqlitexx::sqlitexx)
 ```
 
@@ -240,13 +240,13 @@ if (!name && name.error().primary() == sql::native::primary_code::nomem)
 - The calls that bind or read values are `noexcept` when the `value_traits` of the types are. The built-in ones are,
   also for `std::string` and `blob`, so `bind(1, name)` and `column<std::string>(0)` are `noexcept`. With your own
   traits they follow your `bind()` and `read()`: declare them `noexcept` when they cannot throw.
-- `create_function`, `create_aggregate` and the chaining helpers take what they keep by value. Passing an lvalue
-  copies it where you call them, in your code; the calls themselves only move, and are `noexcept` when moving can't
-  throw. So nothing they keep refers to your variables.
+- `create_function`, `create_aggregate`, `create_collation` and the chaining helpers take what they keep by value.
+  Passing an lvalue copies it where you call them, in your code; the calls themselves only move, and are `noexcept`
+  when moving can't throw. So nothing they keep refers to your variables.
 - sqlitexx catches only its own allocations. What your code throws reaches you unchanged, `std::bad_alloc` included:
   your traits, your callbacks, the copy constructors of what you register. The statement stays usable afterwards.
-  The one exception is code that SQLite calls, SQL functions and aggregates: there every exception becomes an error
-  of the SQL call, since none may unwind through SQLite.
+  The one exception is code that SQLite calls, where nothing may unwind: in SQL functions and aggregates every
+  exception becomes an error of the SQL call, and in a collation, which can't fail, it ends the program.
 - When an error's message can't be copied, the error keeps its code and goes without a message.
 
 Without exceptions, a failed allocation ends the program, as it does in the standard library. SQLite's own out of
@@ -296,7 +296,7 @@ sql::expected<std::string> hello = db.prepare("SELECT greet('Alice')").and_then(
 ```
 
 - The callable is a lambda without `auto` parameters, a function object with one `operator()`, or a function pointer.
-  SQLite keeps a copy until the function is replaced or the database closes.
+  SQLite keeps a copy until the function is replaced or removed, or the database closes.
 - NULL arrives only in an `optional<T>` parameter; anywhere else the call fails with `mismatch`. Returning an empty
   `optional<T>`, or returning `void`, gives NULL.
 - To fail the call, return an `expected<T>` holding an error: the statement fails with its code and message. With
@@ -353,6 +353,108 @@ db.create_aggregate("moving_sum", moving_sum());
 ```
 
 Without `inverse()` and `value()`, using the aggregate with `OVER` is an error when the statement is prepared.
+
+### Collations
+
+`database::create_collation(name, compare)` gives SQLite a sort order written in C++, for `ORDER BY`, comparisons
+and indexes. `compare` takes two `string_view`s and returns a negative number, zero or a positive number, like
+`compare()` on strings:
+
+```cpp
+db.create_collation("by_length", [](sql::string_view a, sql::string_view b) {
+    return a.size() != b.size() ? (a.size() < b.size() ? -1 : 1) : a.compare(b);
+});
+
+db.prepare("SELECT name FROM fruit ORDER BY name COLLATE by_length");
+db.execute("CREATE TABLE tag(name TEXT COLLATE by_length UNIQUE)");   // UNIQUE follows the collation too
+```
+
+- In C++20, `compare` may return what `operator<=>` gives, `std::strong_ordering` or `std::weak_ordering`:
+  `[](sql::string_view a, sql::string_view b) { return a <=> b; }`.
+- A `bool` result doesn't compile: a less-than predicate can't tell SQLite that two texts are equal.
+- The texts arrive as UTF-8 and are not NUL-terminated.
+- The order must be consistent: the same texts always compare the same way. SQLite relies on it for sorting and
+  indexes, so an index built with an inconsistent collation, or with one that changed since, is corrupt.
+- SQLite can't take an error from a comparison. With exceptions enabled, an exception from `compare` ends the program
+  (`std::terminate`), since it may not unwind through SQLite and an unknown order could corrupt an index.
+- SQLite keeps `compare` until the collation is replaced or removed, or the database closes. Registering the same
+  name again replaces it, which fails with `busy` while statements are running.
+
+### Functions and collations with shared state
+
+Functions, aggregates and collations can refer to state outside them, shared between them, as long as SQLite stops
+calling them before the state ends. A `registrations` token takes care of that: what is registered with it is removed
+when the token ends, on every way out of the scope.
+
+```cpp
+struct sort_settings { bool descending = false; } settings;
+sql::registrations scope;   // declared after the state, so it ends first
+
+db.create_collation("configured", [&settings](sql::string_view a, sql::string_view b) {
+    return settings.descending ? b.compare(a) : a.compare(b);
+}, scope);
+db.create_function("set_descending", [&settings](bool descending) { settings.descending = descending; }, scope);
+
+// ... SELECT set_descending(1); SELECT name FROM fruit ORDER BY name COLLATE configured ...
+// the end of the scope removes both, then settings ends
+```
+
+- Every `create_function`, `create_aggregate` and `create_collation` takes a token as its last parameter, and so does
+  every [hook](#hooks).
+- `scope.remove()` removes now and returns the first error; `scope.release()` keeps the registrations and forgets them.
+- What is gone already needs nothing: replaced, removed by name, or released because the database closed. The token
+  may outlive the database, and may hold registrations of several databases.
+- Removing fails with `busy` while any statement on the connection is running: it returned a row and wasn't reset
+  or finished. Statements declared after the token end before it. When the token can't remove a registration, it
+  ends the callable instead: a function or aggregate called afterwards fails with `misuse`, and a collation ends the
+  program (`std::terminate`), since it can't fail and comparing any other way could corrupt an index. Calling
+  `scope.remove()` and checking its result avoids that; so does creating the token outside a loop over rows.
+
+Without a token, `remove_function(name, argument_count)` and `remove_collation(name)` take back a registration by
+name. SQLite releases its copy at once:
+
+```cpp
+db.remove_collation("configured");
+db.remove_function("set_descending", 1);   // a function is known by its name and number of parameters
+```
+
+- For an aggregate, the number of parameters is that of `step()`.
+- Removing fails with `busy` while statements are running, and then nothing is released.
+- Removing what isn't registered succeeds and does nothing.
+- Statements prepared earlier are prepared again before their next step, so those using the removed name fail then.
+
+For state that should simply live as long as SQLite needs it, capture a `std::shared_ptr` instead: no token or
+removing needed.
+
+### Hooks
+
+Hooks run C++ code when transactions commit or roll back, when rows change, and while statements run:
+
+```cpp
+std::vector<std::int64_t> changed;
+std::atomic<bool> cancelled{false};   // set from another thread to cancel
+sql::registrations scope;
+
+db.update_hook([&changed](sql::native::update_kind kind, sql::cstring_view schema, sql::cstring_view table,
+                          std::int64_t rowid) { changed.push_back(rowid); }, scope);
+db.commit_hook([&] { return changed.size() < 1000; }, scope);   // false turns the commit into a rollback
+db.rollback_hook([&] { changed.clear(); }, scope);
+db.progress_handler(1000, [&] { return !cancelled; }, scope);    // every 1000 VM instructions; false interrupts
+```
+
+- `commit_hook`: before every commit, also the automatic one around a single statement. It returns `void`, or a
+  `bool`: false turns the commit into a rollback, and the statement fails with `extended_code::constraint_commithook`.
+- `rollback_hook`: after a rollback, by `ROLLBACK` or by an error.
+- `update_hook`: for every row inserted, updated or deleted in a rowid table, with the kind of change
+  (`update_kind::insert`, `update` or `remove`), the schema, the table and the rowid.
+- `progress_handler(instructions, handler)`: while a statement runs; false interrupts it, and it fails with
+  `interrupt`. Useful for cancelling long queries.
+- A connection has one hook of each kind. Setting one replaces the one before, and `nullptr` clears it:
+  `db.commit_hook(nullptr)`. With a `registrations` token, it is cleared when the token ends; that always works, also
+  while statements run.
+- A hook must not change the connection running it: no statements on it from inside a hook.
+- Hooks can't report errors. With exceptions enabled, an exception from a commit hook rolls back and one from a
+  progress handler interrupts; one from an update or rollback hook ends the program (`std::terminate`).
 
 ### Rows as a range
 

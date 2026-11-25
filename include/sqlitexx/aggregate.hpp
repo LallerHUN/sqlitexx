@@ -69,13 +69,7 @@ expected<void> database::create_aggregate(
 
     if (!db)
     {
-        return expected<void>(
-            unexpect,
-            detail::error_with(
-                native::result(static_cast<int>(native::primary_code::misuse)),
-                "create_aggregate() needs an open database"
-            )
-        );
+        return expected<void>(unexpect, needs_open("create_aggregate() needs an open database"));
     }
     // Running out of memory for SQLite's copy is an error; moving into it is the user's type's work
     stored* owned = new (std::nothrow) stored(std::move(prototype));
@@ -93,13 +87,70 @@ expected<void> database::create_aggregate(
     return {};
 }
 
+template <class Aggregate>
+expected<void> database::create_aggregate(
+    cstring_view name,
+    Aggregate prototype,
+    registrations& scope
+) noexcept(std::is_nothrow_move_constructible<Aggregate>::value)
+{
+    return create_aggregate(name, std::move(prototype), native::function_flags::none, scope);
+}
+
+template <class Aggregate>
+expected<void> database::create_aggregate(
+    cstring_view name,
+    Aggregate prototype,
+    native::function_flags flags,
+    registrations& scope
+) noexcept(std::is_nothrow_move_constructible<Aggregate>::value)
+{
+    using stored = Aggregate;
+    static_assert(
+        detail::is_aggregate_class<stored>::value,
+        "an aggregate class has a step(...) member for each row and a finish() member for the result"
+    );
+    static_assert(
+        std::is_copy_constructible<stored>::value,
+        "an aggregate class must be copyable: every group works on its own copy of the prototype"
+    );
+    using block = detail::scoped_callable<stored>;
+    using caller = detail::aggregate_caller<stored, detail::shared_with_token<stored>>;
+
+    if (!db)
+    {
+        return expected<void>(unexpect, needs_open("create_aggregate() needs an open database"));
+    }
+    block* made = block::make(
+        db.handle(),
+        name,
+        caller::argument_count,
+        detail::registration_block::kind::function,
+        std::move(prototype)
+    );
+    if (made == nullptr)
+    {
+        return expected<void>(unexpect, detail::out_of_memory());
+    }
+
+    // When registering fails, SQLite calls destroy and the block goes, as the token doesn't hold it yet
+    const native::result code =
+        register_aggregate<caller>(name, flags, made->user_data(), detail::is_window_class<stored>());
+    if (code.failed())
+    {
+        return expected<void>(unexpect, failure(code));
+    }
+    scope.adopt(made);
+    return {};
+}
+
 template <class Caller>
 native::result database::register_aggregate(
     cstring_view name,
     native::function_flags flags,
     void* prototype,
     std::false_type /*window*/
-)
+) noexcept
 {
     return db.create_aggregate(
         name.c_str(),
@@ -118,7 +169,7 @@ native::result database::register_aggregate(
     native::function_flags flags,
     void* prototype,
     std::true_type /*window*/
-)
+) noexcept
 {
     return db.create_window_function(
         name.c_str(),

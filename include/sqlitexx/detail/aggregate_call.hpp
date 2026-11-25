@@ -6,6 +6,7 @@
 // finish() (or value() while a window moves) and destroyed after the final call.
 
 #include "sqlitexx/config.hpp"
+#include "sqlitexx/detail/registration_block.hpp"
 #include "sqlitexx/detail/sql_call.hpp"
 #include "sqlitexx/detail/utility.hpp"
 #include "sqlitexx/native/context.hpp"
@@ -41,7 +42,8 @@ namespace detail
     {
     };
 
-    template <class T>
+    // Storage: how user_data holds the prototype (owned_by_sqlite, or shared_with_token through a registrations token)
+    template <class T, class Storage = owned_by_sqlite<T>>
     class aggregate_caller
     {
     public:
@@ -140,7 +142,7 @@ namespace detail
 
         static void destroy(void* prototype) noexcept
         {
-            delete static_cast<T*>(prototype);
+            Storage::destroy(prototype);
         }
 
     private:
@@ -205,12 +207,19 @@ namespace detail
         }
 
         // The group's object, created from the prototype on the group's first row. Null when the call has failed
-        // (out of memory) or an earlier row of the group failed.
+        // (out of memory, or the registrations token ended the prototype) or an earlier row of the group failed.
         static T* current(
             native::context& ctx,
             bool create
         )
         {
+            const T* prototype = Storage::callable(ctx.user_data());
+            if (prototype == nullptr)
+            {
+                registration_ended(ctx);
+                mark_failed(ctx);
+                return nullptr;
+            }
             state* group = static_cast<state*>(ctx.aggregate_context(create ? sizeof(state) : 0));
             if (group == nullptr)
             {
@@ -226,8 +235,7 @@ namespace detail
             }
             if (group->object == nullptr)
             {
-                const T& prototype = *static_cast<const T*>(ctx.user_data());
-                group->object = new (std::nothrow) T(prototype);
+                group->object = new (std::nothrow) T(*prototype);
                 if (group->object == nullptr)
                 {
                     ctx.result_error_nomem();
@@ -291,6 +299,13 @@ namespace detail
             {
                 return;
             }
+            // The group's object may refer to what ended with the prototype
+            const T* prototype = Storage::callable(ctx.user_data());
+            if (prototype == nullptr)
+            {
+                registration_ended(ctx);
+                return;
+            }
             if (group != nullptr && group->object != nullptr)
             {
                 T& object = *group->object;
@@ -303,7 +318,7 @@ namespace detail
                 );
                 return;
             }
-            T fresh(*static_cast<const T*>(ctx.user_data()));
+            T fresh(*prototype);
             result_writer::respond(
                 ctx,
                 [&]

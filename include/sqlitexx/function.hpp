@@ -16,9 +16,10 @@
 //  - With exceptions enabled, an exception thrown by the callable fails the call too, with what() as the message;
 //    std::bad_alloc becomes primary_code::nomem. Exceptions never reach SQLite.
 //
-// SQLite keeps a copy of the callable (moved, for an rvalue) until the function is replaced or the database closes. It
-// may be called on any thread that uses the connection, and from inside any statement: a lambda capturing by
-// reference must keep what it refers to alive that long.
+// SQLite keeps a copy of the callable (moved, for an rvalue) until the function is replaced or removed
+// (database::remove_function, or a registrations token ending: sqlitexx/registrations.hpp) or the database closes. It
+// may be called on any thread that uses the connection, and from inside any statement: a lambda capturing by reference
+// must keep what it refers to alive that long.
 //
 // The function takes exactly as many arguments as the callable has parameters; SQLite rejects calls with a different
 // count when the statement is prepared. Registering the same name and count again replaces the function.
@@ -48,13 +49,7 @@ expected<void> database::create_function(
 
     if (!db)
     {
-        return expected<void>(
-            unexpect,
-            detail::error_with(
-                native::result(static_cast<int>(native::primary_code::misuse)),
-                "create_function() needs an open database"
-            )
-        );
+        return expected<void>(unexpect, needs_open("create_function() needs an open database"));
     }
     // Running out of memory for SQLite's copy is an error; moving into it is the user's type's work
     stored* owned = new (std::nothrow) stored(std::move(function));
@@ -70,6 +65,60 @@ expected<void> database::create_function(
     {
         return expected<void>(unexpect, failure(code));
     }
+    return {};
+}
+
+template <class F>
+expected<void> database::create_function(
+    cstring_view name,
+    F function,
+    registrations& scope
+) noexcept(std::is_nothrow_move_constructible<F>::value)
+{
+    return create_function(name, std::move(function), native::function_flags::none, scope);
+}
+
+template <class F>
+expected<void> database::create_function(
+    cstring_view name,
+    F function,
+    native::function_flags flags,
+    registrations& scope
+) noexcept(std::is_nothrow_move_constructible<F>::value)
+{
+    using block = detail::scoped_callable<F>;
+    using caller = detail::function_caller<F, detail::shared_with_token<F>>;
+
+    if (!db)
+    {
+        return expected<void>(unexpect, needs_open("create_function() needs an open database"));
+    }
+    block* made = block::make(
+        db.handle(),
+        name,
+        caller::argument_count,
+        detail::registration_block::kind::function,
+        std::move(function)
+    );
+    if (made == nullptr)
+    {
+        return expected<void>(unexpect, detail::out_of_memory());
+    }
+
+    // When registering fails, SQLite calls destroy and the block goes, as the token doesn't hold it yet
+    const native::result code = db.create_function(
+        name.c_str(),
+        caller::argument_count,
+        flags,
+        made->user_data(),
+        &caller::call,
+        &caller::destroy
+    );
+    if (code.failed())
+    {
+        return expected<void>(unexpect, failure(code));
+    }
+    scope.adopt(made);
     return {};
 }
 } // sqlitexx
