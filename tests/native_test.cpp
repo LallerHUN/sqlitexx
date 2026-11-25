@@ -196,6 +196,34 @@ void test_backup()
     CHECK(std::strstr(destination.errmsg(), "nowhere") != nullptr);
 }
 
+void test_blob_handle()
+{
+    connection db;
+    CHECK(db.open(":memory:").ok());
+    CHECK(db.exec("CREATE TABLE t(id INTEGER PRIMARY KEY, data BLOB); INSERT INTO t VALUES(1, zeroblob(4))").ok());
+
+    blob_handle blob;
+    CHECK(!blob);
+    CHECK(blob.open(db, "main", "t", "data", 1, true).ok());
+    CHECK(static_cast<bool>(blob));
+    CHECK(blob.bytes() == 4);
+    const unsigned char written[2] = {7, 9};
+    CHECK(blob.write(written, 2, 1).ok());
+    unsigned char read[4] = {1, 1, 1, 1};
+    CHECK(blob.read(read, 4, 0).ok());
+    CHECK(read[0] == 0 && read[1] == 7 && read[2] == 9 && read[3] == 0);
+
+    // Past the end fails; the blob keeps its size
+    CHECK(blob.write(written, 2, 3) == primary_code::error);
+    CHECK(blob.close().ok());
+    CHECK(!blob);
+
+    // A failed open holds nothing; the connection has the message
+    CHECK(blob.open(db, "main", "t", "nowhere", 1, false) == primary_code::error);
+    CHECK(!blob);
+    CHECK(std::strstr(db.errmsg(), "nowhere") != nullptr);
+}
+
 void test_moves_and_statement_outliving_connection()
 {
     statement stmt;
@@ -229,6 +257,7 @@ int main()
     test_constraint_is_extended();
     test_moves_and_statement_outliving_connection();
     test_backup();
+    test_blob_handle();
 
     return test::summary();
 }

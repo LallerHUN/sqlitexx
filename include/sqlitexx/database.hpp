@@ -2,6 +2,7 @@
 #define SQLITEXX_DATABASE_HPP
 
 #include "sqlitexx/backup.hpp"
+#include "sqlitexx/blob_stream.hpp"
 #include "sqlitexx/config.hpp"
 #include "sqlitexx/cstring_view.hpp"
 #include "sqlitexx/error.hpp"
@@ -62,6 +63,16 @@ public:
         database& destination,
         cstring_view source_schema = "main",
         cstring_view destination_schema = "main"
+    );
+
+    // Incremental blob I/O (see sqlitexx/blob_stream.hpp): opens the value in `column` of the row `rowid` of `table`
+    // for reading and writing in pieces. The value must be a blob or text; NULL and numbers cannot be opened.
+    expected<blob_stream> open_blob(
+        cstring_view table,
+        cstring_view column,
+        std::int64_t rowid,
+        blob_access access = blob_access::read_only,
+        cstring_view schema = "main"
     );
 
     // SQL functions written in C++, with the parameters and return type of `function` (see sqlitexx/function.hpp).

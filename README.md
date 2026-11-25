@@ -180,6 +180,7 @@ For an offline build, unpack the dependencies yourself and point CMake at them w
 | `nullptr` | NULL | not readable |
 | `sqlitexx::blob` (`std::vector<unsigned char>`) | as a blob | |
 | `std::vector<std::byte>` (C++17) | as a blob | |
+| `sqlitexx::zeroblob{size}` | as a blob of `size` zero bytes, without building it in memory | not readable |
 | `std::span<const std::byte>`, `std::span<const unsigned char>` (C++20) | as a blob, without copying it first | a view into SQLite's memory until the next step |
 | `std::span` of writable bytes, or with a fixed extent (C++20) | as a blob | not readable |
 | `std::u8string`, `std::u8string_view`, `u8cstring_view` (C++20) | as UTF-8 text | like their `char` counterparts |
@@ -334,6 +335,28 @@ For large databases, `begin_backup_to(destination)` gives a `backup` that copies
 true once the copy is complete, and `remaining()` and `page_count()` report progress. Between steps, other
 connections can use the source. A `busy` or `locked` error from `step()` means a lock was in the way, and stepping
 again later retries.
+
+### Large blobs in pieces
+
+`open_blob(table, column, rowid)` opens one blob for reading or writing in pieces, so a large one never has to fit in
+memory whole. The `blob_stream` it gives has a position, like a file:
+
+```cpp
+// Reserve the space first: a blob's size can't change through a stream
+db.prepare("INSERT INTO file(data) VALUES(?)").and_then(sql::execute_with(sql::zeroblob{size}));
+sql::expected<sql::blob_stream> out =
+    db.open_blob("file", "data", db.last_insert_rowid(), sql::blob_access::read_write);
+out->write(chunk.data(), chunk.size());   // continues from the position each time
+
+sql::expected<sql::blob_stream> in = db.open_blob("file", "data", rowid);
+unsigned char buffer[4096];
+sql::expected<std::size_t> got = in->read(buffer, sizeof buffer);   // 0 at the end
+```
+
+- `read()` gives how many bytes it read: fewer near the end, 0 at the end. `seek()` moves the position.
+- Writing past the end is a `range` error and writes nothing. Reserve the size with `zeroblob` when inserting.
+- `reopen(rowid)` moves to the same column of another row, much faster than opening again.
+- When the row changes through another statement, the stream expires and reads and writes fail with `abort`.
 
 ### Waiting for locks
 

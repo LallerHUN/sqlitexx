@@ -5,9 +5,9 @@
 // arguments become C++ types.
 //
 // Built in: integers, bool, floating point, std::string, string_view, cstring_view, const char* (binding only), nullptr
-// (binding only), blob, and optional<T> of any of these for nullable values. From C++17 and C++20 on also std::byte
-// and std::span blobs (sqlitexx/value_bytes.hpp) and char8_t text (sqlitexx/value_char8.hpp). Other types plug in by
-// specializing value_traits:
+// (binding only), blob, zeroblob (binding only, sqlitexx/zeroblob.hpp), and optional<T> of any of these for nullable
+// values. From C++17 and C++20 on also std::byte and std::span blobs (sqlitexx/value_bytes.hpp) and char8_t text
+// (sqlitexx/value_char8.hpp). Other types plug in by specializing value_traits:
 //
 //     template <>
 //     struct sqlitexx::value_traits<my_type>
@@ -467,5 +467,6 @@ struct value_traits<optional<T>>
 // the definitions above.
 #include "sqlitexx/value_bytes.hpp"
 #include "sqlitexx/value_char8.hpp"
+#include "sqlitexx/zeroblob.hpp"
 
 #endif // SQLITEXX_VALUE_HPP

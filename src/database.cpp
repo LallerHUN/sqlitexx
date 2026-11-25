@@ -148,6 +148,31 @@ expected<backup> database::begin_backup_to(
     return backup(std::move(started), destination.db.handle());
 }
 
+expected<blob_stream> database::open_blob(
+    cstring_view table,
+    cstring_view column,
+    std::int64_t rowid,
+    blob_access access,
+    cstring_view schema
+)
+{
+    if (!db)
+    {
+        return expected<blob_stream>(
+            unexpect,
+            error(native::result(SQLITE_MISUSE), "open_blob() needs an open database")
+        );
+    }
+    native::blob_handle opened;
+    const native::result code =
+        opened.open(db, schema.c_str(), table.c_str(), column.c_str(), rowid, access == blob_access::read_write);
+    if (code.failed())
+    {
+        return expected<blob_stream>(unexpect, failure(code));
+    }
+    return blob_stream(std::move(opened), db.handle());
+}
+
 native::connection& database::native_connection() noexcept
 {
     return db;
