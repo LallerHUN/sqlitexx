@@ -229,6 +229,11 @@ expected<void> database::remove_collation(cstring_view name) noexcept
     return {};
 }
 
+error database::needs_open(const char* message) noexcept
+{
+    return detail::error_with(native::result(SQLITE_MISUSE), message);
+}
+
 error database::failure(native::result code) const noexcept
 {
     return detail::make_error(db.handle(), code);

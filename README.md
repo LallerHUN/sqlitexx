@@ -380,33 +380,50 @@ db.execute("CREATE TABLE tag(name TEXT COLLATE by_length UNIQUE)");   // UNIQUE 
 - SQLite keeps `compare` until the collation is replaced or removed, or the database closes. Registering the same
   name again replaces it, which fails with `busy` while statements are running.
 
-### Removing functions and collations
+### Functions and collations with shared state
 
-`remove_function(name, argument_count)` and `remove_collation(name)` take back what `create_function`,
-`create_aggregate` and `create_collation` registered. SQLite releases its copy at once, so functions and collations
-can refer to state outside them, shared between them, as long as they are removed before it ends:
+Functions, aggregates and collations can refer to state outside them, shared between them, as long as SQLite stops
+calling them before the state ends. A `registrations` token takes care of that: what is registered with it is removed
+when the token ends, on every way out of the scope.
 
 ```cpp
 struct sort_settings { bool descending = false; } settings;
+sql::registrations scope;   // declared after the state, so it ends first
 
 db.create_collation("configured", [&settings](sql::string_view a, sql::string_view b) {
     return settings.descending ? b.compare(a) : a.compare(b);
-});
-db.create_function("set_descending", [&settings](bool descending) { settings.descending = descending; });
+}, scope);
+db.create_function("set_descending", [&settings](bool descending) { settings.descending = descending; }, scope);
 
 // ... SELECT set_descending(1); SELECT name FROM fruit ORDER BY name COLLATE configured ...
-
-db.remove_collation("configured");      // before settings ends: nothing in SQLite refers to it afterwards
-db.remove_function("set_descending", 1);
+// the end of the scope removes both, then settings ends
 ```
 
-- A function is known by its name and its number of parameters; for an aggregate, those of `step()`.
-- Removing fails with `busy` while statements are running, and then nothing is released. Check the result before
-  ending the shared state.
+- Every `create_function`, `create_aggregate` and `create_collation` takes a token as its last parameter.
+- `scope.remove()` removes now and returns the first error; `scope.release()` keeps the registrations and forgets them.
+- What is gone already needs nothing: replaced, removed by name, or released because the database closed. The token
+  may outlive the database, and may hold registrations of several databases.
+- Removing fails with `busy` while any statement on the connection is running: it returned a row and wasn't reset
+  or finished. Statements declared after the token end before it. When the token can't remove a registration, it
+  ends the callable instead: a function or aggregate called afterwards fails with `misuse`, and a collation ends the
+  program (`std::terminate`), since it can't fail and comparing any other way could corrupt an index. Calling
+  `scope.remove()` and checking its result avoids that; so does creating the token outside a loop over rows.
+
+Without a token, `remove_function(name, argument_count)` and `remove_collation(name)` take back a registration by
+name. SQLite releases its copy at once:
+
+```cpp
+db.remove_collation("configured");
+db.remove_function("set_descending", 1);   // a function is known by its name and number of parameters
+```
+
+- For an aggregate, the number of parameters is that of `step()`.
+- Removing fails with `busy` while statements are running, and then nothing is released.
 - Removing what isn't registered succeeds and does nothing.
 - Statements prepared earlier are prepared again before their next step, so those using the removed name fail then.
-- For state that should simply live as long as SQLite needs it, capture a `std::shared_ptr` instead: no removing
-  needed.
+
+For state that should simply live as long as SQLite needs it, capture a `std::shared_ptr` instead: no token or
+removing needed.
 
 ### Rows as a range
 

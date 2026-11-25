@@ -9,6 +9,7 @@
 #include "sqlitexx/expected.hpp"
 #include "sqlitexx/native/connection.hpp"
 #include "sqlitexx/native/flags.hpp"
+#include "sqlitexx/registrations.hpp"
 #include "sqlitexx/statement.hpp"
 
 #include <chrono>
@@ -103,6 +104,41 @@ public:
         Compare compare
     ) noexcept(std::is_nothrow_move_constructible<Compare>::value);
 
+    // The same, held by a registrations token: removed when the token ends, so the callable may refer to state that
+    // ends with the token's scope (see sqlitexx/registrations.hpp)
+    template <class F>
+    expected<void> create_function(
+        cstring_view name,
+        F function,
+        registrations& scope
+    ) noexcept(std::is_nothrow_move_constructible<F>::value);
+    template <class F>
+    expected<void> create_function(
+        cstring_view name,
+        F function,
+        native::function_flags flags,
+        registrations& scope
+    ) noexcept(std::is_nothrow_move_constructible<F>::value);
+    template <class Aggregate>
+    expected<void> create_aggregate(
+        cstring_view name,
+        Aggregate prototype,
+        registrations& scope
+    ) noexcept(std::is_nothrow_move_constructible<Aggregate>::value);
+    template <class Aggregate>
+    expected<void> create_aggregate(
+        cstring_view name,
+        Aggregate prototype,
+        native::function_flags flags,
+        registrations& scope
+    ) noexcept(std::is_nothrow_move_constructible<Aggregate>::value);
+    template <class Compare>
+    expected<void> create_collation(
+        cstring_view name,
+        Compare compare,
+        registrations& scope
+    ) noexcept(std::is_nothrow_move_constructible<Compare>::value);
+
     // Removing what create_function, create_aggregate and create_collation registered. SQLite releases its copy of the
     // callable at once, so state the callable refers to may end after a successful call. A function is known by its
     // name and its number of parameters (an aggregate's: those of step()). Removing fails with primary_code::busy while
@@ -125,13 +161,16 @@ private:
 
     error failure(native::result code) const noexcept;
 
+    // The error for registering on a closed database
+    static error needs_open(const char* message) noexcept;
+
     template <class Caller>
     native::result register_aggregate(
         cstring_view name,
         native::function_flags flags,
         void* prototype,
         std::false_type /*window*/
-    );
+    ) noexcept;
 
     template <class Caller>
     native::result register_aggregate(
@@ -139,7 +178,7 @@ private:
         native::function_flags flags,
         void* prototype,
         std::true_type /*window*/
-    );
+    ) noexcept;
 };
 
 } // sqlitexx

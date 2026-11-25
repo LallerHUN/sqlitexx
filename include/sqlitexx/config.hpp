@@ -18,6 +18,13 @@
 #error "sqlitexx needs C++11 or newer"
 #endif
 
+// [[nodiscard]] from C++17, where every compiler takes it without a warning
+#if SQLITEXX_CPLUSPLUS >= 201703L
+#define SQLITEXX_DETAIL_NODISCARD [[nodiscard]]
+#else
+#define SQLITEXX_DETAIL_NODISCARD
+#endif
+
 #if !defined(SQLITEXX_USE_STD_CXX17_TYPES)
 // Linking the sqlitexx CMake target defines it. Without CMake, define it the way the library was built: 0 for the
 // backports, 1 for the std:: types.
