@@ -250,7 +250,9 @@ if (!name && name.error().primary() == sql::native::primary_code::nomem)
 - When an error's message can't be copied, the error keeps its code and goes without a message.
 
 Without exceptions, a failed allocation ends the program, as it does in the standard library. SQLite's own out of
-memory is a `nomem` error either way.
+memory is a `nomem` error either way. With MSVC's iterator debugging (its Debug builds), the standard library gives
+every `std::string` a proxy object on the heap, even an empty one, and ends the program itself when that fails; the
+guarantee holds in release builds.
 
 ### Chaining helpers
 

@@ -26,6 +26,15 @@
 #define SQLITEXX_TEST_EXCEPTIONS 0
 #endif
 
+// MSVC's iterator debugging (Debug builds) gives every std::string a proxy object on the heap, even an empty one, and
+// its noexcept constructors end the program when that allocation fails. With memory gone, the standard library stops
+// the program itself, so the runs that refuse allocations are left out there.
+#if defined(_ITERATOR_DEBUG_LEVEL) && _ITERATOR_DEBUG_LEVEL == 2
+#define SQLITEXX_TEST_DEBUG_PROXIES 1
+#else
+#define SQLITEXX_TEST_DEBUG_PROXIES 0
+#endif
+
 using sqlitexx::blob;
 using sqlitexx::database;
 using sqlitexx::error;
@@ -756,6 +765,12 @@ void test_user_exceptions_pass_through()
     CHECK(one && *one == 1);
 }
 
+// A function rather than the macro in an if: compilers warn about constant conditions
+bool allocations_can_be_refused()
+{
+    return SQLITEXX_TEST_DEBUG_PROXIES == 0;
+}
+
 void test_out_of_memory_error_allocates_nothing()
 {
     allow_allocations(0);
@@ -773,11 +788,18 @@ int main()
 {
 #if SQLITEXX_TEST_EXCEPTIONS
     test_user_exceptions_pass_through();
-    test_out_of_memory_error_allocates_nothing();
-    exhaust("statements", statements);
-    exhaust("blobs", blobs);
-    exhaust("functions", functions);
-    exhaust("transactions and backups", transactions_and_backups);
+    if (allocations_can_be_refused())
+    {
+        test_out_of_memory_error_allocates_nothing();
+        exhaust("statements", statements);
+        exhaust("blobs", blobs);
+        exhaust("functions", functions);
+        exhaust("transactions and backups", transactions_and_backups);
+    }
+    else
+    {
+        std::printf("MSVC iterator debugging: the runs that refuse allocations are left out\n");
+    }
 #endif
     return test::summary();
 }

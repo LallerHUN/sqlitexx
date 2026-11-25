@@ -6,7 +6,8 @@
 // With exceptions enabled, sqlitexx catches std::bad_alloc where it allocates and gives an error with
 // primary_code::nomem instead. That error's message, "out of memory", is short enough for the standard libraries to
 // keep inside the std::string (13 characters; libstdc++, libc++ and MSVC keep up to 15), so making it allocates
-// nothing. Without exceptions, a failed allocation ends the program as it does in the standard library.
+// nothing. Without exceptions, a failed allocation ends the program as it does in the standard library. So does MSVC's
+// iterator debugging (Debug builds): it gives every std::string a proxy object on the heap, even an empty one.
 
 #include "sqlitexx/error.hpp"
 #include "sqlitexx/expected.hpp"
