@@ -170,7 +170,7 @@ namespace detail
 
 // and_then step: binds the values to parameters 1, 2, 3, ... and passes the statement on.
 template <class... Args>
-detail::bind_step<Args...> bind_values(Args... values) noexcept(
+SQLITEXX_DETAIL_NODISCARD detail::bind_step<Args...> bind_values(Args... values) noexcept(
     detail::all_of<std::is_nothrow_move_constructible<Args>...>::value
 )
 {
@@ -179,7 +179,7 @@ detail::bind_step<Args...> bind_values(Args... values) noexcept(
 
 // and_then step: steps once and reads the row (statement::first).
 template <class... T>
-detail::first_step<T...> first()
+SQLITEXX_DETAIL_NODISCARD detail::first_step<T...> first()
 {
     return detail::first_step<T...>();
 }
@@ -188,7 +188,7 @@ detail::first_step<T...> first()
 template <
     class... T,
     class Callback>
-detail::for_each_step<
+SQLITEXX_DETAIL_NODISCARD detail::for_each_step<
     Callback,
     T...>
 for_each_row(Callback callback) noexcept(std::is_nothrow_move_constructible<Callback>::value)
@@ -198,7 +198,7 @@ for_each_row(Callback callback) noexcept(std::is_nothrow_move_constructible<Call
 
 // and_then step: binds the values and runs the statement to completion (statement::execute).
 template <class... Args>
-detail::execute_step<Args...> execute_with(Args... values) noexcept(
+SQLITEXX_DETAIL_NODISCARD detail::execute_step<Args...> execute_with(Args... values) noexcept(
     detail::all_of<std::is_nothrow_move_constructible<Args>...>::value
 )
 {
@@ -207,7 +207,7 @@ detail::execute_step<Args...> execute_with(Args... values) noexcept(
 
 // or_else handler for errors with this primary code (any extended code under it); other errors pass through.
 template <class Handler>
-detail::error_handler<
+SQLITEXX_DETAIL_NODISCARD detail::error_handler<
     detail::has_primary_code,
     Handler>
 on(native::primary_code code,
@@ -221,7 +221,7 @@ on(native::primary_code code,
 
 // or_else handler for errors with exactly this extended code, for example native::extended_code::constraint_unique.
 template <class Handler>
-detail::error_handler<
+SQLITEXX_DETAIL_NODISCARD detail::error_handler<
     detail::has_extended_code,
     Handler>
 on(native::extended_code code,
@@ -236,7 +236,7 @@ on(native::extended_code code,
 // or_else handler for errors with exactly this extended code given as a number, for a code that
 // native::extended_code doesn't list yet.
 template <class Handler>
-detail::error_handler<
+SQLITEXX_DETAIL_NODISCARD detail::error_handler<
     detail::has_extended_code,
     Handler>
 on(int extended_code,

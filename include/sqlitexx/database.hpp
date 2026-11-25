@@ -35,7 +35,7 @@ public:
     database& operator=(const database&) = delete;
 
     // Lifetime
-    static expected<database> open(
+    SQLITEXX_DETAIL_NODISCARD static expected<database> open(
         const char* filename,
         native::open_flags flags = native::open_flags::default_rw
     ) noexcept;
@@ -43,8 +43,8 @@ public:
     // Statements. execute() runs one or more semicolon-separated statements and discards their rows. prepare()
     // takes exactly one statement: SQL holding none, or several, is a primary_code::misuse error rather than
     // silently ignoring the rest.
-    expected<void> execute(const char* sql) noexcept;
-    expected<statement> prepare(string_view sql) noexcept;
+    SQLITEXX_DETAIL_NODISCARD expected<void> execute(const char* sql) noexcept;
+    SQLITEXX_DETAIL_NODISCARD expected<statement> prepare(string_view sql) noexcept;
 
     // State
     std::int64_t last_insert_rowid() const noexcept;
@@ -54,17 +54,17 @@ public:
     // primary_code::busy. Zero or less turns waiting off, as it is when a database opens. A timeout longer than SQLite
     // takes (INT_MAX milliseconds, about 24.8 days) waits that long. Coarser durations convert:
     // std::chrono::seconds(5).
-    expected<void> busy_timeout(std::chrono::milliseconds timeout) noexcept;
+    SQLITEXX_DETAIL_NODISCARD expected<void> busy_timeout(std::chrono::milliseconds timeout) noexcept;
 
     // Backup (see sqlitexx/backup.hpp): copies this database over `destination`, replacing everything in it.
     // backup_to() copies all at once; begin_backup_to() gives a backup to copy in steps. The schemas are "main",
     // "temp" or the name of an attached database.
-    expected<void> backup_to(
+    SQLITEXX_DETAIL_NODISCARD expected<void> backup_to(
         database& destination,
         cstring_view source_schema = "main",
         cstring_view destination_schema = "main"
     ) noexcept;
-    expected<backup> begin_backup_to(
+    SQLITEXX_DETAIL_NODISCARD expected<backup> begin_backup_to(
         database& destination,
         cstring_view source_schema = "main",
         cstring_view destination_schema = "main"
@@ -72,7 +72,7 @@ public:
 
     // Incremental blob I/O (see sqlitexx/blob_stream.hpp): opens the value in `column` of the row `rowid` of `table`
     // for reading and writing in pieces. The value must be a blob or text; NULL and numbers cannot be opened.
-    expected<blob_stream> open_blob(
+    SQLITEXX_DETAIL_NODISCARD expected<blob_stream> open_blob(
         cstring_view table,
         cstring_view column,
         std::int64_t rowid,
@@ -83,7 +83,7 @@ public:
     // SQL functions written in C++, with the parameters and return type of `function` (see sqlitexx/function.hpp).
     // Registering the same name with the same number of parameters again replaces the function.
     template <class F>
-    expected<void> create_function(
+    SQLITEXX_DETAIL_NODISCARD expected<void> create_function(
         cstring_view name,
         F function,
         native::function_flags flags = native::function_flags::none
@@ -92,7 +92,7 @@ public:
     // Aggregate functions written in C++, from a class with step(...) and finish() members; with inverse(...) and
     // value() also a window function (see sqlitexx/aggregate.hpp). Each group works on its own copy of `prototype`.
     template <class Aggregate>
-    expected<void> create_aggregate(
+    SQLITEXX_DETAIL_NODISCARD expected<void> create_aggregate(
         cstring_view name,
         Aggregate prototype,
         native::function_flags flags = native::function_flags::none
@@ -102,7 +102,7 @@ public:
     // zero or positive number, or in C++20 what operator<=> gives (see sqlitexx/collation.hpp). Registering the same
     // name again replaces the collation.
     template <class Compare>
-    expected<void> create_collation(
+    SQLITEXX_DETAIL_NODISCARD expected<void> create_collation(
         cstring_view name,
         Compare compare
     ) noexcept(std::is_nothrow_move_constructible<Compare>::value);
@@ -110,33 +110,33 @@ public:
     // The same, held by a registrations token: removed when the token ends, so the callable may refer to state that
     // ends with the token's scope (see sqlitexx/registrations.hpp)
     template <class F>
-    expected<void> create_function(
+    SQLITEXX_DETAIL_NODISCARD expected<void> create_function(
         cstring_view name,
         F function,
         registrations& scope
     ) noexcept(std::is_nothrow_move_constructible<F>::value);
     template <class F>
-    expected<void> create_function(
+    SQLITEXX_DETAIL_NODISCARD expected<void> create_function(
         cstring_view name,
         F function,
         native::function_flags flags,
         registrations& scope
     ) noexcept(std::is_nothrow_move_constructible<F>::value);
     template <class Aggregate>
-    expected<void> create_aggregate(
+    SQLITEXX_DETAIL_NODISCARD expected<void> create_aggregate(
         cstring_view name,
         Aggregate prototype,
         registrations& scope
     ) noexcept(std::is_nothrow_move_constructible<Aggregate>::value);
     template <class Aggregate>
-    expected<void> create_aggregate(
+    SQLITEXX_DETAIL_NODISCARD expected<void> create_aggregate(
         cstring_view name,
         Aggregate prototype,
         native::function_flags flags,
         registrations& scope
     ) noexcept(std::is_nothrow_move_constructible<Aggregate>::value);
     template <class Compare>
-    expected<void> create_collation(
+    SQLITEXX_DETAIL_NODISCARD expected<void> create_collation(
         cstring_view name,
         Compare compare,
         registrations& scope
@@ -147,11 +147,11 @@ public:
     // name and its number of parameters (an aggregate's: those of step()). Removing fails with primary_code::busy while
     // statements are running; removing what isn't registered succeeds and does nothing. Statements prepared earlier
     // are prepared again before their next step, and those using the name then fail.
-    expected<void> remove_function(
+    SQLITEXX_DETAIL_NODISCARD expected<void> remove_function(
         cstring_view name,
         int argument_count
     ) noexcept;
-    expected<void> remove_collation(cstring_view name) noexcept;
+    SQLITEXX_DETAIL_NODISCARD expected<void> remove_collation(cstring_view name) noexcept;
 
     // Hooks (see sqlitexx/hooks.hpp): one of each per connection. Setting one replaces the one before, nullptr clears
     // it. commit_hook: called before a transaction commits; returning false turns the commit into a rollback.
@@ -160,44 +160,46 @@ public:
     // instructions of a statement; returning false interrupts it. With a registrations token, the hook is cleared when
     // the token ends.
     template <class F>
-    expected<void> commit_hook(F hook) noexcept(std::is_nothrow_move_constructible<F>::value);
+    SQLITEXX_DETAIL_NODISCARD expected<void> commit_hook(F hook) noexcept(std::is_nothrow_move_constructible<F>::value);
     template <class F>
-    expected<void> commit_hook(
+    SQLITEXX_DETAIL_NODISCARD expected<void> commit_hook(
         F hook,
         registrations& scope
     ) noexcept(std::is_nothrow_move_constructible<F>::value);
-    expected<void> commit_hook(std::nullptr_t) noexcept;
+    SQLITEXX_DETAIL_NODISCARD expected<void> commit_hook(std::nullptr_t) noexcept;
 
     template <class F>
-    expected<void> rollback_hook(F hook) noexcept(std::is_nothrow_move_constructible<F>::value);
+    SQLITEXX_DETAIL_NODISCARD expected<void> rollback_hook(F hook) noexcept(
+        std::is_nothrow_move_constructible<F>::value
+    );
     template <class F>
-    expected<void> rollback_hook(
+    SQLITEXX_DETAIL_NODISCARD expected<void> rollback_hook(
         F hook,
         registrations& scope
     ) noexcept(std::is_nothrow_move_constructible<F>::value);
-    expected<void> rollback_hook(std::nullptr_t) noexcept;
+    SQLITEXX_DETAIL_NODISCARD expected<void> rollback_hook(std::nullptr_t) noexcept;
 
     template <class F>
-    expected<void> update_hook(F hook) noexcept(std::is_nothrow_move_constructible<F>::value);
+    SQLITEXX_DETAIL_NODISCARD expected<void> update_hook(F hook) noexcept(std::is_nothrow_move_constructible<F>::value);
     template <class F>
-    expected<void> update_hook(
+    SQLITEXX_DETAIL_NODISCARD expected<void> update_hook(
         F hook,
         registrations& scope
     ) noexcept(std::is_nothrow_move_constructible<F>::value);
-    expected<void> update_hook(std::nullptr_t) noexcept;
+    SQLITEXX_DETAIL_NODISCARD expected<void> update_hook(std::nullptr_t) noexcept;
 
     template <class F>
-    expected<void> progress_handler(
+    SQLITEXX_DETAIL_NODISCARD expected<void> progress_handler(
         int instructions,
         F handler
     ) noexcept(std::is_nothrow_move_constructible<F>::value);
     template <class F>
-    expected<void> progress_handler(
+    SQLITEXX_DETAIL_NODISCARD expected<void> progress_handler(
         int instructions,
         F handler,
         registrations& scope
     ) noexcept(std::is_nothrow_move_constructible<F>::value);
-    expected<void> progress_handler(std::nullptr_t) noexcept;
+    SQLITEXX_DETAIL_NODISCARD expected<void> progress_handler(std::nullptr_t) noexcept;
 
     // The native connection underneath, for what the typed layer does not cover
     native::connection& native_connection() noexcept;

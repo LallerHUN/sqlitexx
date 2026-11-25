@@ -18,9 +18,12 @@
 #error "sqlitexx needs C++11 or newer"
 #endif
 
-// [[nodiscard]] from C++17, where every compiler takes it without a warning
+// For results that must not be ignored, errors above all: [[nodiscard]] from C++17. Before it, Clang's own attribute,
+// which a cast to void silences like [[nodiscard]]; GCC's warn_unused_result isn't used, as no cast silences it.
 #if SQLITEXX_CPLUSPLUS >= 201703L
 #define SQLITEXX_DETAIL_NODISCARD [[nodiscard]]
+#elif defined(__clang__)
+#define SQLITEXX_DETAIL_NODISCARD [[clang::warn_unused_result]]
 #else
 #define SQLITEXX_DETAIL_NODISCARD
 #endif

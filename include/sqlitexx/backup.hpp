@@ -47,7 +47,7 @@ public:
     // Copies up to `pages` pages, or all that remain for a negative count. True when the copy is complete, false when
     // pages remain. A primary_code::busy or locked error means a lock was in the way: stepping again later retries.
     // Other errors end the backup.
-    expected<bool> step(int pages = -1) noexcept;
+    SQLITEXX_DETAIL_NODISCARD expected<bool> step(int pages = -1) noexcept;
 
     // Progress, as of the last step(): pages left to copy, and pages in the source
     int remaining() const noexcept;

@@ -74,11 +74,11 @@ public:
     std::size_t position() const noexcept;
 
     // Moves the position; past the end is a primary_code::range error and leaves the position as it was.
-    expected<void> seek(std::size_t offset) noexcept;
+    SQLITEXX_DETAIL_NODISCARD expected<void> seek(std::size_t offset) noexcept;
 
     // Reads up to `count` bytes from the position into `buffer` and moves past them. Gives the number of bytes read:
     // fewer than `count` near the end, 0 at the end.
-    expected<std::size_t> read(
+    SQLITEXX_DETAIL_NODISCARD expected<std::size_t> read(
         void* buffer,
         std::size_t count
     ) noexcept;
@@ -90,7 +90,7 @@ public:
         typename std::enable_if<
             detail::is_growable_bytes<Bytes>::value,
             int>::type = 0>
-    expected<std::size_t> read(Bytes& out)
+    SQLITEXX_DETAIL_NODISCARD expected<std::size_t> read(Bytes& out)
     {
         return read_growing(out, length - offset);
     }
@@ -100,7 +100,7 @@ public:
         typename std::enable_if<
             detail::is_growable_bytes<Bytes>::value,
             int>::type = 0>
-    expected<std::size_t> read(
+    SQLITEXX_DETAIL_NODISCARD expected<std::size_t> read(
         Bytes& out,
         std::size_t count
     )
@@ -116,7 +116,7 @@ public:
         typename std::enable_if<
             detail::is_fixed_bytes<Bytes>::value,
             int>::type = 0>
-    expected<std::size_t> read(Bytes& out)
+    SQLITEXX_DETAIL_NODISCARD expected<std::size_t> read(Bytes& out)
     {
         return read(static_cast<void*>(out.data()), out.size());
     }
@@ -126,7 +126,7 @@ public:
         typename std::enable_if<
             detail::is_fixed_bytes<Bytes>::value,
             int>::type = 0>
-    expected<std::size_t> read(
+    SQLITEXX_DETAIL_NODISCARD expected<std::size_t> read(
         Bytes& out,
         std::size_t count
     )
@@ -144,7 +144,7 @@ public:
         typename std::enable_if<
             detail::is_byte<Byte>::value,
             int>::type = 0>
-    expected<std::size_t> read(Byte (&out)[N])
+    SQLITEXX_DETAIL_NODISCARD expected<std::size_t> read(Byte (&out)[N])
     {
         return read(static_cast<void*>(out), N);
     }
@@ -155,7 +155,7 @@ public:
         typename std::enable_if<
             detail::is_byte<Byte>::value,
             int>::type = 0>
-    expected<std::size_t> read(
+    SQLITEXX_DETAIL_NODISCARD expected<std::size_t> read(
         Byte (&out)[N],
         std::size_t count
     )
@@ -169,7 +169,7 @@ public:
 
     // Writes `count` bytes at the position and moves past them. Writing past the end is a primary_code::range error
     // and writes nothing: the blob keeps its size. A stream opened read-only gives primary_code::readonly.
-    expected<void> write(
+    SQLITEXX_DETAIL_NODISCARD expected<void> write(
         const void* data,
         std::size_t count
     ) noexcept;
@@ -182,7 +182,7 @@ public:
         typename std::enable_if<
             detail::is_readable_bytes<Bytes>::value,
             int>::type = 0>
-    expected<void> write(const Bytes& data)
+    SQLITEXX_DETAIL_NODISCARD expected<void> write(const Bytes& data)
     {
         return write(static_cast<const void*>(data.data()), data.size());
     }
@@ -192,7 +192,7 @@ public:
         typename std::enable_if<
             detail::is_readable_bytes<Bytes>::value,
             int>::type = 0>
-    expected<void> write(
+    SQLITEXX_DETAIL_NODISCARD expected<void> write(
         const Bytes& data,
         std::size_t count
     )
@@ -210,7 +210,7 @@ public:
         typename std::enable_if<
             detail::is_byte_array_element<Byte>::value,
             int>::type = 0>
-    expected<void> write(const Byte (&data)[N])
+    SQLITEXX_DETAIL_NODISCARD expected<void> write(const Byte (&data)[N])
     {
         return write(static_cast<const void*>(data), N);
     }
@@ -221,7 +221,7 @@ public:
         typename std::enable_if<
             detail::is_byte_array_element<Byte>::value,
             int>::type = 0>
-    expected<void> write(
+    SQLITEXX_DETAIL_NODISCARD expected<void> write(
         const Byte (&data)[N],
         std::size_t count
     )
@@ -234,10 +234,10 @@ public:
     }
 
     // Moves to the same column of another row, much faster than opening again. The position goes back to 0.
-    expected<void> reopen(std::int64_t rowid) noexcept;
+    SQLITEXX_DETAIL_NODISCARD expected<void> reopen(std::int64_t rowid) noexcept;
 
     // Closes the blob now and reports any error; the destructor closes it too, without a report.
-    expected<void> close() noexcept;
+    SQLITEXX_DETAIL_NODISCARD expected<void> close() noexcept;
 
     // The native blob underneath, for what the typed layer does not cover
     native::blob_handle& native_blob() noexcept;
