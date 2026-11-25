@@ -2,6 +2,7 @@
 #define SQLITEXX_NATIVE_CONNECTION_HPP
 
 #include "sqlitexx/config.hpp"
+#include "sqlitexx/native/collation_callback.hpp"
 #include "sqlitexx/native/flags.hpp"
 #include "sqlitexx/native/function_callbacks.hpp"
 #include "sqlitexx/native/result.hpp"
@@ -106,6 +107,17 @@ namespace native
             final_callback final,
             final_callback value,
             function_callback inverse,
+            destroy_callback destroy
+        ) noexcept;
+
+        // Collations (sqlite3_create_collation_v2 with UTF-8 text), for COLLATE and ORDER BY. A null `compare` removes
+        // the collation. `destroy` (if not null) is called with `user_data` when the collation is replaced or removed
+        // or the connection closes. Unlike create_function, it is not called when this call fails: the caller still
+        // owns `user_data` then. Replacing or removing a collation while statements are running fails with busy.
+        result create_collation(
+            const char* name,
+            void* user_data,
+            compare_callback compare,
             destroy_callback destroy
         ) noexcept;
 

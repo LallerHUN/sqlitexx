@@ -94,6 +94,15 @@ public:
         native::function_flags flags = native::function_flags::none
     ) noexcept(std::is_nothrow_move_constructible<Aggregate>::value);
 
+    // Collations written in C++, for COLLATE and ORDER BY: `compare` takes two string_views and returns a negative,
+    // zero or positive number, or in C++20 what operator<=> gives (see sqlitexx/collation.hpp). Registering the same
+    // name again replaces the collation.
+    template <class Compare>
+    expected<void> create_collation(
+        cstring_view name,
+        Compare compare
+    ) noexcept(std::is_nothrow_move_constructible<Compare>::value);
+
     // The native connection underneath, for what the typed layer does not cover
     native::connection& native_connection() noexcept;
     const native::connection& native_connection() const noexcept;
@@ -124,8 +133,9 @@ private:
 
 } // sqlitexx
 
-// create_function() and create_aggregate() are defined with the machinery that calls them
+// create_function(), create_aggregate() and create_collation() are defined with the machinery that calls them
 #include "sqlitexx/aggregate.hpp"
+#include "sqlitexx/collation.hpp"
 #include "sqlitexx/function.hpp"
 
 #endif // SQLITEXX_DATABASE_HPP

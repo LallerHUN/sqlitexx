@@ -3,6 +3,7 @@ foreach(test_name
     backup_test
     blob_stream_test
     busy_timeout_test
+    collation_test
     cstring_view_test
     function_test
     native_test

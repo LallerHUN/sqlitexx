@@ -6,6 +6,12 @@ All notable changes to sqlitexx are listed here. The format is based on
 
 ## [Unreleased]
 
+### Added
+
+- `database::create_collation(name, compare)`: collations written in C++, for `COLLATE`, `ORDER BY` and indexes.
+  `compare` takes two `string_view`s and returns a negative, zero or positive number, or in C++20 what `operator<=>`
+  gives. Native layer: `connection::create_collation`.
+
 ## [0.3.0] - 2026-11-25
 
 ### Added

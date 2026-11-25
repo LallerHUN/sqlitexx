@@ -130,6 +130,31 @@ struct string_capture
     }
 };
 
+// A collation: sorts backwards
+struct backwards
+{
+    int operator()(
+        sqlitexx::string_view first,
+        sqlitexx::string_view second
+    ) const
+    {
+        return second.compare(first);
+    }
+};
+
+struct backwards_named
+{
+    std::string name;
+
+    int operator()(
+        sqlitexx::string_view first,
+        sqlitexx::string_view second
+    ) const
+    {
+        return second.compare(first);
+    }
+};
+
 // Never called: the checks are in unevaluated operands. A string_view comes in ready made: noexcept(...) includes
 // converting arguments, and string-view-lite does not mark its constructors noexcept for every compiler.
 inline void noexcept_checks(
@@ -139,7 +164,8 @@ inline void noexcept_checks(
     const std::string& name,
     sqlitexx::string_view view,
     const no_capture& plain,
-    const string_capture& capturing
+    const string_capture& capturing,
+    const backwards_named& named_collation
 )
 {
     // The calls that run none of the user's code
@@ -171,6 +197,9 @@ inline void noexcept_checks(
     SQLITEXX_TEST_NOEXCEPT(db.create_function("f", no_capture()));
     SQLITEXX_TEST_NOT_NOEXCEPT(db.create_function("f", capturing));
     SQLITEXX_TEST_NOEXCEPT(db.create_function("f", string_capture()));
+    SQLITEXX_TEST_NOEXCEPT(db.create_collation("c", backwards()));
+    SQLITEXX_TEST_NOT_NOEXCEPT(db.create_collation("c", named_collation));
+    SQLITEXX_TEST_NOEXCEPT(db.create_collation("c", backwards_named()));
     SQLITEXX_TEST_NOEXCEPT(sqlitexx::execute_with("Alice", 42));
     SQLITEXX_TEST_NOEXCEPT(sqlitexx::execute_with(std::string()));
     SQLITEXX_TEST_NOT_NOEXCEPT(sqlitexx::execute_with(name));
@@ -606,20 +635,23 @@ outcome functions(const inputs& in)
     {
         return out;
     }
-    // sqlitexx copies the function and the prototype, and their strings allocate
-    if (failed(db->create_function("greet", in.greet), out)
-        || failed(db->create_aggregate("joined", in.prototype), out))
+    // sqlitexx copies the function, the prototype and the collation, and their strings allocate
+    if (failed(db->create_function("greet", in.greet), out) || failed(db->create_aggregate("joined", in.prototype), out)
+        || failed(db->create_collation("backwards", backwards()), out))
     {
         return out;
     }
 
-    expected<statement> query =
-        db->prepare("SELECT greet('Ann'), (SELECT joined(x) FROM (SELECT 'a' x UNION SELECT 'b'))");
+    expected<statement> query = db->prepare(
+        "SELECT greet('Ann'), (SELECT joined(x) FROM (SELECT 'a' x UNION SELECT 'b')),"
+        " (SELECT x FROM (SELECT 'a' x UNION ALL SELECT 'b') ORDER BY x COLLATE backwards LIMIT 1)"
+    );
     if (failed(query, out))
     {
         return out;
     }
-    expected<std::tuple<std::string, std::string>> row = query->first<std::string, std::string>();
+    expected<std::tuple<std::string, std::string, std::string>> row =
+        query->first<std::string, std::string, std::string>();
     if (failed(row, out))
     {
         return out;
@@ -627,7 +659,8 @@ outcome functions(const inputs& in)
     // Compared without allocating
     const std::string& greeting = std::get<0>(*row);
     if (greeting.size() != in.prefix.size() + 3 || greeting.compare(0, in.prefix.size(), in.prefix) != 0
-        || std::get<1>(*row).size() != in.separator.size() + 2)
+        || std::get<1>(*row).size() != in.separator.size() + 2 || std::get<2>(*row).size() != 1
+        || std::get<2>(*row)[0] != 'b')
     {
         return outcome::wrong;
     }
