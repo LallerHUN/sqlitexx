@@ -5,6 +5,7 @@
 #include "sqlitexx/blob_stream.hpp"
 #include "sqlitexx/config.hpp"
 #include "sqlitexx/cstring_view.hpp"
+#include "sqlitexx/detail/hook_slots.hpp"
 #include "sqlitexx/error.hpp"
 #include "sqlitexx/expected.hpp"
 #include "sqlitexx/native/connection.hpp"
@@ -13,7 +14,9 @@
 #include "sqlitexx/statement.hpp"
 
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <type_traits>
 
 namespace sqlitexx
@@ -26,7 +29,7 @@ public:
     database() noexcept = default;
 
     database(database&&) noexcept = default;
-    database& operator=(database&&) noexcept = default;
+    database& operator=(database&& other) noexcept;
 
     database(const database&) = delete;
     database& operator=(const database&) = delete;
@@ -150,12 +153,60 @@ public:
     ) noexcept;
     expected<void> remove_collation(cstring_view name) noexcept;
 
+    // Hooks (see sqlitexx/hooks.hpp): one of each per connection. Setting one replaces the one before, nullptr clears
+    // it. commit_hook: called before a transaction commits; returning false turns the commit into a rollback.
+    // rollback_hook: after a transaction rolls back. update_hook: for every row inserted, updated or deleted, with the
+    // kind of change, the schema, the table and the rowid. progress_handler: every `instructions` virtual machine
+    // instructions of a statement; returning false interrupts it. With a registrations token, the hook is cleared when
+    // the token ends.
+    template <class F>
+    expected<void> commit_hook(F hook) noexcept(std::is_nothrow_move_constructible<F>::value);
+    template <class F>
+    expected<void> commit_hook(
+        F hook,
+        registrations& scope
+    ) noexcept(std::is_nothrow_move_constructible<F>::value);
+    expected<void> commit_hook(std::nullptr_t) noexcept;
+
+    template <class F>
+    expected<void> rollback_hook(F hook) noexcept(std::is_nothrow_move_constructible<F>::value);
+    template <class F>
+    expected<void> rollback_hook(
+        F hook,
+        registrations& scope
+    ) noexcept(std::is_nothrow_move_constructible<F>::value);
+    expected<void> rollback_hook(std::nullptr_t) noexcept;
+
+    template <class F>
+    expected<void> update_hook(F hook) noexcept(std::is_nothrow_move_constructible<F>::value);
+    template <class F>
+    expected<void> update_hook(
+        F hook,
+        registrations& scope
+    ) noexcept(std::is_nothrow_move_constructible<F>::value);
+    expected<void> update_hook(std::nullptr_t) noexcept;
+
+    template <class F>
+    expected<void> progress_handler(
+        int instructions,
+        F handler
+    ) noexcept(std::is_nothrow_move_constructible<F>::value);
+    template <class F>
+    expected<void> progress_handler(
+        int instructions,
+        F handler,
+        registrations& scope
+    ) noexcept(std::is_nothrow_move_constructible<F>::value);
+    expected<void> progress_handler(std::nullptr_t) noexcept;
+
     // The native connection underneath, for what the typed layer does not cover
     native::connection& native_connection() noexcept;
     const native::connection& native_connection() const noexcept;
 
 private:
     native::connection db;
+    // Created with the first hook. Declared after the connection: it clears the hooks before the connection closes.
+    std::unique_ptr<detail::hook_slots> hooks;
 
     explicit database(native::connection&& opened) noexcept;
 
@@ -163,6 +214,21 @@ private:
 
     // The error for registering on a closed database
     static error needs_open(const char* message) noexcept;
+
+    // Hooks: installing one made by Caller from `hook`, and clearing one
+    template <
+        class Caller,
+        class F>
+    expected<void> install_hook(
+        F hook,
+        int instructions,
+        registrations* scope,
+        const char* closed_message
+    ) noexcept(std::is_nothrow_move_constructible<F>::value);
+    expected<void> clear_hook(
+        detail::registration_block::kind which,
+        const char* closed_message
+    ) noexcept;
 
     template <class Caller>
     native::result register_aggregate(
@@ -187,5 +253,6 @@ private:
 #include "sqlitexx/aggregate.hpp"
 #include "sqlitexx/collation.hpp"
 #include "sqlitexx/function.hpp"
+#include "sqlitexx/hooks.hpp"
 
 #endif // SQLITEXX_DATABASE_HPP

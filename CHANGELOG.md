@@ -18,6 +18,10 @@ All notable changes to sqlitexx are listed here. The format is based on
   `create_function`, `create_aggregate` and `create_collation` take it as their last parameter. `remove()` removes
   now and reports errors, `release()` keeps the registrations. When the token can't remove a registration (`busy`),
   it ends the callable: functions called afterwards fail with `misuse`, collations end the program.
+- Hooks: `database::commit_hook`, `rollback_hook`, `update_hook` and `progress_handler`, with or without a
+  `registrations` token. A commit hook returning false turns the commit into a rollback, a progress handler returning
+  false interrupts the statement. `nullptr` clears a hook. Native layer: `connection::commit_hook`, `rollback_hook`,
+  `update_hook`, `progress_handler` and `native::update_kind`.
 
 ## [0.3.0] - 2026-11-25
 

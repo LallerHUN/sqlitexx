@@ -229,6 +229,54 @@ expected<void> database::remove_collation(cstring_view name) noexcept
     return {};
 }
 
+database& database::operator=(database&& other) noexcept
+{
+    if (this != &other)
+    {
+        // The hooks go first, while their connection is still open
+        hooks.reset();
+        db = std::move(other.db);
+        hooks = std::move(other.hooks);
+    }
+    return *this;
+}
+
+expected<void> database::commit_hook(std::nullptr_t) noexcept
+{
+    return clear_hook(detail::registration_block::kind::commit_hook, "commit_hook() needs an open database");
+}
+
+expected<void> database::rollback_hook(std::nullptr_t) noexcept
+{
+    return clear_hook(detail::registration_block::kind::rollback_hook, "rollback_hook() needs an open database");
+}
+
+expected<void> database::update_hook(std::nullptr_t) noexcept
+{
+    return clear_hook(detail::registration_block::kind::update_hook, "update_hook() needs an open database");
+}
+
+expected<void> database::progress_handler(std::nullptr_t) noexcept
+{
+    return clear_hook(detail::registration_block::kind::progress_handler, "progress_handler() needs an open database");
+}
+
+expected<void> database::clear_hook(
+    detail::registration_block::kind which,
+    const char* closed_message
+) noexcept
+{
+    if (!db)
+    {
+        return expected<void>(unexpect, needs_open(closed_message));
+    }
+    if (hooks)
+    {
+        hooks->clear(which);
+    }
+    return {};
+}
+
 error database::needs_open(const char* message) noexcept
 {
     return detail::error_with(native::result(SQLITE_MISUSE), message);

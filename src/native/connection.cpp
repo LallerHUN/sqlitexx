@@ -1,6 +1,7 @@
 #include "impl_sqlitexx.hpp"
 
 #include <climits>
+#include <type_traits>
 
 namespace sqlitexx
 {
@@ -276,6 +277,59 @@ namespace native
             inverse,
             destroy
         ));
+    }
+
+    // The callback types name the integer that sqlite3_int64 is, so they convert without casts
+    static_assert(
+        std::is_same<
+            sqlite3_int64,
+            long long>::value,
+        "update_callback takes the rowid as sqlite3_int64"
+    );
+    static_assert(
+        static_cast<int>(update_kind::insert) == SQLITE_INSERT,
+        "update_kind matches SQLite"
+    );
+    static_assert(
+        static_cast<int>(update_kind::update) == SQLITE_UPDATE,
+        "update_kind matches SQLite"
+    );
+    static_assert(
+        static_cast<int>(update_kind::remove) == SQLITE_DELETE,
+        "update_kind matches SQLite"
+    );
+
+    void* connection::commit_hook(
+        commit_callback hook,
+        void* user_data
+    ) noexcept
+    {
+        return sqlite3_commit_hook(db, hook, user_data);
+    }
+
+    void* connection::rollback_hook(
+        rollback_callback hook,
+        void* user_data
+    ) noexcept
+    {
+        return sqlite3_rollback_hook(db, hook, user_data);
+    }
+
+    void* connection::update_hook(
+        update_callback hook,
+        void* user_data
+    ) noexcept
+    {
+        return sqlite3_update_hook(db, hook, user_data);
+    }
+
+    void connection::progress_handler(
+        int instructions,
+        progress_callback handler,
+        void* user_data
+    ) noexcept
+    {
+        sqlite3_progress_handler(db, instructions, handler, user_data);
     }
 
     result connection::create_collation(
