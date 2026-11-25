@@ -278,5 +278,15 @@ namespace native
         ));
     }
 
+    result connection::create_collation(
+        const char* name,
+        void* user_data,
+        compare_callback compare,
+        destroy_callback destroy
+    ) noexcept
+    {
+        return result(sqlite3_create_collation_v2(db, name, SQLITE_UTF8, user_data, compare, destroy));
+    }
+
 } // native
 } // sqlitexx

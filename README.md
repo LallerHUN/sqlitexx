@@ -240,13 +240,13 @@ if (!name && name.error().primary() == sql::native::primary_code::nomem)
 - The calls that bind or read values are `noexcept` when the `value_traits` of the types are. The built-in ones are,
   also for `std::string` and `blob`, so `bind(1, name)` and `column<std::string>(0)` are `noexcept`. With your own
   traits they follow your `bind()` and `read()`: declare them `noexcept` when they cannot throw.
-- `create_function`, `create_aggregate` and the chaining helpers take what they keep by value. Passing an lvalue
-  copies it where you call them, in your code; the calls themselves only move, and are `noexcept` when moving can't
-  throw. So nothing they keep refers to your variables.
+- `create_function`, `create_aggregate`, `create_collation` and the chaining helpers take what they keep by value.
+  Passing an lvalue copies it where you call them, in your code; the calls themselves only move, and are `noexcept`
+  when moving can't throw. So nothing they keep refers to your variables.
 - sqlitexx catches only its own allocations. What your code throws reaches you unchanged, `std::bad_alloc` included:
   your traits, your callbacks, the copy constructors of what you register. The statement stays usable afterwards.
-  The one exception is code that SQLite calls, SQL functions and aggregates: there every exception becomes an error
-  of the SQL call, since none may unwind through SQLite.
+  The one exception is code that SQLite calls, where nothing may unwind: in SQL functions and aggregates every
+  exception becomes an error of the SQL call, and in a collation, which can't fail, it ends the program.
 - When an error's message can't be copied, the error keeps its code and goes without a message.
 
 Without exceptions, a failed allocation ends the program, as it does in the standard library. SQLite's own out of
@@ -296,7 +296,7 @@ sql::expected<std::string> hello = db.prepare("SELECT greet('Alice')").and_then(
 ```
 
 - The callable is a lambda without `auto` parameters, a function object with one `operator()`, or a function pointer.
-  SQLite keeps a copy until the function is replaced or the database closes.
+  SQLite keeps a copy until the function is replaced or removed, or the database closes.
 - NULL arrives only in an `optional<T>` parameter; anywhere else the call fails with `mismatch`. Returning an empty
   `optional<T>`, or returning `void`, gives NULL.
 - To fail the call, return an `expected<T>` holding an error: the statement fails with its code and message. With
@@ -353,6 +353,60 @@ db.create_aggregate("moving_sum", moving_sum());
 ```
 
 Without `inverse()` and `value()`, using the aggregate with `OVER` is an error when the statement is prepared.
+
+### Collations
+
+`database::create_collation(name, compare)` gives SQLite a sort order written in C++, for `ORDER BY`, comparisons
+and indexes. `compare` takes two `string_view`s and returns a negative number, zero or a positive number, like
+`compare()` on strings:
+
+```cpp
+db.create_collation("by_length", [](sql::string_view a, sql::string_view b) {
+    return a.size() != b.size() ? (a.size() < b.size() ? -1 : 1) : a.compare(b);
+});
+
+db.prepare("SELECT name FROM fruit ORDER BY name COLLATE by_length");
+db.execute("CREATE TABLE tag(name TEXT COLLATE by_length UNIQUE)");   // UNIQUE follows the collation too
+```
+
+- In C++20, `compare` may return what `operator<=>` gives, `std::strong_ordering` or `std::weak_ordering`:
+  `[](sql::string_view a, sql::string_view b) { return a <=> b; }`.
+- A `bool` result doesn't compile: a less-than predicate can't tell SQLite that two texts are equal.
+- The texts arrive as UTF-8 and are not NUL-terminated.
+- The order must be consistent: the same texts always compare the same way. SQLite relies on it for sorting and
+  indexes, so an index built with an inconsistent collation, or with one that changed since, is corrupt.
+- SQLite can't take an error from a comparison. With exceptions enabled, an exception from `compare` ends the program
+  (`std::terminate`), since it may not unwind through SQLite and an unknown order could corrupt an index.
+- SQLite keeps `compare` until the collation is replaced or removed, or the database closes. Registering the same
+  name again replaces it, which fails with `busy` while statements are running.
+
+### Removing functions and collations
+
+`remove_function(name, argument_count)` and `remove_collation(name)` take back what `create_function`,
+`create_aggregate` and `create_collation` registered. SQLite releases its copy at once, so functions and collations
+can refer to state outside them, shared between them, as long as they are removed before it ends:
+
+```cpp
+struct sort_settings { bool descending = false; } settings;
+
+db.create_collation("configured", [&settings](sql::string_view a, sql::string_view b) {
+    return settings.descending ? b.compare(a) : a.compare(b);
+});
+db.create_function("set_descending", [&settings](bool descending) { settings.descending = descending; });
+
+// ... SELECT set_descending(1); SELECT name FROM fruit ORDER BY name COLLATE configured ...
+
+db.remove_collation("configured");      // before settings ends: nothing in SQLite refers to it afterwards
+db.remove_function("set_descending", 1);
+```
+
+- A function is known by its name and its number of parameters; for an aggregate, those of `step()`.
+- Removing fails with `busy` while statements are running, and then nothing is released. Check the result before
+  ending the shared state.
+- Removing what isn't registered succeeds and does nothing.
+- Statements prepared earlier are prepared again before their next step, so those using the removed name fail then.
+- For state that should simply live as long as SQLite needs it, capture a `std::shared_ptr` instead: no removing
+  needed.
 
 ### Rows as a range
 
