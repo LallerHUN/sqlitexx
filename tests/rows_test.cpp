@@ -313,6 +313,58 @@ void test_query_all()
     CHECK(none && none->empty());
 }
 
+void test_query_next()
+{
+    database db = open_users();
+    sqlitexx::results<std::string> names = db.query<std::string>("SELECT name FROM user WHERE id >= ? ORDER BY id", 1);
+
+    // Pages of two: Alice and Bob, then Carol, then nothing, and nothing again
+    expected<std::vector<std::string>> page = names.next(2);
+    CHECK(page && (*page == std::vector<std::string>{"Alice", "Bob"}));
+    page = names.next(2);
+    CHECK(page && (*page == std::vector<std::string>{"Carol"}));
+    page = names.next(2);
+    CHECK(page && page->empty());
+    page = names.next(2);
+    CHECK(page && page->empty());
+
+    // Another run (a loop, first() or all()) starts the pages over
+    expected<std::string> first = names.first();
+    CHECK(first && *first == "Alice");
+    page = names.next(1);
+    CHECK(page && (*page == std::vector<std::string>{"Alice"}));
+    for (expected<std::string>& name : names)
+    {
+        static_cast<void>(name);
+        break;
+    }
+    page = names.next(5);
+    CHECK(page && page->size() == 3);
+
+    // Zero rows asked: nothing read, nothing moved
+    page = names.next(0);
+    CHECK(page && page->empty());
+}
+
+void test_query_next_errors()
+{
+    database db = open_users();
+
+    // A row that can't be read fails its page; the next page goes on after it. Bob's age is NULL.
+    sqlitexx::results<int> ages = db.query<int>("SELECT age FROM user ORDER BY id");
+    expected<std::vector<int>> page = ages.next(2);
+    CHECK(!page && page.error().primary() == primary_code::mismatch);
+    page = ages.next(2);
+    CHECK(page && (*page == std::vector<int>{25}));
+
+    // A query that couldn't start gives its error every time
+    sqlitexx::results<int> broken = db.query<int>("SELECT nope FROM user");
+    expected<std::vector<int>> failed = broken.next(1);
+    CHECK(!failed && failed.error().primary() == primary_code::error);
+    failed = broken.next(1);
+    CHECK(!failed && failed.error().primary() == primary_code::error);
+}
+
 #if defined(__cpp_lib_ranges)
 static_assert(std::ranges::input_range<sqlitexx::results<int>>);
 static_assert(std::input_iterator<rows_range<int>::iterator>);
@@ -374,6 +426,8 @@ int main()
     test_query_runs_again();
     test_query_error_is_the_only_element();
     test_query_all();
+    test_query_next();
+    test_query_next_errors();
 #if defined(__cpp_lib_ranges)
     test_cxx20_views();
 #endif

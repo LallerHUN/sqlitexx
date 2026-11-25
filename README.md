@@ -282,6 +282,10 @@ for (sql::expected<std::tuple<std::string, int>>& user :
 
 sql::expected<std::int64_t> count = db.query<std::int64_t>("SELECT count(*) FROM user").first();
 sql::expected<std::vector<std::string>> names = db.query<std::string>("SELECT name FROM user").all();
+
+// Pages: next(count) reads on from where the previous page stopped; an empty page means the end
+sql::results<std::string> users = db.query<std::string>("SELECT name FROM user ORDER BY name");
+sql::expected<std::vector<std::string>> page = users.next(20);
 ```
 
 - The rows are a `results<T...>`, which owns its statement, so the loop above is safe in every C++ standard.
@@ -290,11 +294,14 @@ sql::expected<std::vector<std::string>> names = db.query<std::string>("SELECT na
   element. `first()` and `all()` give the first error they meet.
 - `first()` gives a `done` error when there is no row, so `on(native::primary_code::done, ...)` turns that into a
   value. `all()` reads every row into a `std::vector`.
-- Every loop, `first()` and `all()` runs the query again from the start and sees the data as it is then. Rows are
-  read one step at a time: nothing is cached or read ahead.
-- Inside a loop, `string_view` and the other views point into the current row. `first()` and `all()` on a
-  temporary, as in `db.query<sql::string_view>(sql).first()`, don't compile with them, since the statement ends
-  before you could use the view: read a `std::string` or a blob, or keep the `results` in a variable. Your own
+- Every loop, `first()` and `all()` runs the query again from the start and sees the data as it is then. `next()`
+  reads on from where the previous `next()` stopped, and starts over after any of the others. Rows are read one step
+  at a time: nothing is cached or read ahead.
+- A row that can't be read fails its page in `next()`, and the next page goes on after it.
+- Inside a loop, `string_view` and the other views point into the current row. `first()` on a temporary, as in
+  `db.query<sql::string_view>(sql).first()`, doesn't compile with them, since the statement ends before you could
+  use the view: read a `std::string` or a blob, or keep the `results` in a variable. `all()` and `next()` never take
+  views, because each step ends the views of the row before. Your own
   `value_traits` say they read a view with `static constexpr bool reads_view = true;`. The `first<T>()` chaining
   step on a statement fresh from `prepare()` checks the same.
 
