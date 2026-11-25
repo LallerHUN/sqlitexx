@@ -5,6 +5,7 @@
 // callable and turns what it returns into the result or the error of the call.
 
 #include "sqlitexx/config.hpp"
+#include "sqlitexx/detail/registration_block.hpp"
 #include "sqlitexx/detail/sql_call.hpp"
 #include "sqlitexx/detail/utility.hpp"
 #include "sqlitexx/native/context.hpp"
@@ -16,7 +17,8 @@ namespace sqlitexx
 {
 namespace detail
 {
-    template <class F>
+    // Storage: how user_data holds the callable (owned_by_sqlite, or shared_with_token through a registrations token)
+    template <class F, class Storage = owned_by_sqlite<F>>
     class function_caller
     {
     public:
@@ -35,17 +37,22 @@ namespace detail
                 ctx,
                 [&]
                 {
+                    F* function = Storage::callable(ctx.user_data());
+                    if (function == nullptr)
+                    {
+                        registration_ended(ctx);
+                        return;
+                    }
                     arguments read;
                     if (!argument_reader<arguments>::read(ctx, values, read))
                     {
                         return;
                     }
-                    F& function = *static_cast<F*>(ctx.user_data());
                     result_writer::respond(
                         ctx,
                         [&]
                         {
-                            return detail::apply(function, std::move(read));
+                            return detail::apply(*function, std::move(read));
                         }
                     );
                 }
@@ -54,7 +61,7 @@ namespace detail
 
         static void destroy(void* stored) noexcept
         {
-            delete static_cast<F*>(stored);
+            Storage::destroy(stored);
         }
     };
 } // detail

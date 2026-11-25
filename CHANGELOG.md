@@ -14,6 +14,10 @@ All notable changes to sqlitexx are listed here. The format is based on
 - `database::remove_function(name, argument_count)` and `remove_collation(name)` take back SQL functions, aggregates
   and collations. SQLite releases its copy at once, so they can refer to state outside them that ends earlier than
   the database.
+- `registrations`: a token that removes the functions, aggregates and collations registered with it when it ends.
+  `create_function`, `create_aggregate` and `create_collation` take it as their last parameter. `remove()` removes
+  now and reports errors, `release()` keeps the registrations. When the token can't remove a registration (`busy`),
+  it ends the callable: functions called afterwards fail with `misuse`, collations end the program.
 
 ## [0.3.0] - 2026-11-25
 

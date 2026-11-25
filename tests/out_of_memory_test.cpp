@@ -202,6 +202,11 @@ inline void noexcept_checks(
     SQLITEXX_TEST_NOEXCEPT(db.create_collation("c", backwards_named()));
     SQLITEXX_TEST_NOEXCEPT(db.remove_function("f", 1));
     SQLITEXX_TEST_NOEXCEPT(db.remove_collation("c"));
+    SQLITEXX_TEST_NOEXCEPT(db.create_function("f", plain, std::declval<sqlitexx::registrations&>()));
+    SQLITEXX_TEST_NOT_NOEXCEPT(db.create_function("f", capturing, std::declval<sqlitexx::registrations&>()));
+    SQLITEXX_TEST_NOEXCEPT(db.create_collation("c", backwards(), std::declval<sqlitexx::registrations&>()));
+    SQLITEXX_TEST_NOEXCEPT(std::declval<sqlitexx::registrations&>().remove());
+    SQLITEXX_TEST_NOEXCEPT(std::declval<sqlitexx::registrations&>().release());
     SQLITEXX_TEST_NOEXCEPT(sqlitexx::execute_with("Alice", 42));
     SQLITEXX_TEST_NOEXCEPT(sqlitexx::execute_with(std::string()));
     SQLITEXX_TEST_NOT_NOEXCEPT(sqlitexx::execute_with(name));
@@ -640,6 +645,13 @@ outcome functions(const inputs& in)
     // sqlitexx copies the function, the prototype and the collation, and their strings allocate
     if (failed(db->create_function("greet", in.greet), out) || failed(db->create_aggregate("joined", in.prototype), out)
         || failed(db->create_collation("backwards", backwards()), out))
+    {
+        return out;
+    }
+    // With a token, the control block and the name it keeps allocate too
+    sqlitexx::registrations scope;
+    if (failed(db->create_function("scoped_greet", in.greet, scope), out)
+        || failed(db->create_collation("scoped_backwards", backwards(), scope), out) || failed(scope.remove(), out))
     {
         return out;
     }

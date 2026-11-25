@@ -92,6 +92,13 @@ namespace detail
         );
     }
 
+    // The error of a call after its registrations token ended the callable (see sqlitexx/registrations.hpp)
+    inline void registration_ended(native::context& ctx) noexcept
+    {
+        ctx.result_error("the registrations token of this function ended before the function was removed");
+        ctx.result_error_code(native::result(static_cast<int>(native::primary_code::misuse)));
+    }
+
     // Runs `body` and turns an exception into the error of the call
     template <class Body>
     void guarded(

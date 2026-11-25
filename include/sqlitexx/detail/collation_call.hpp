@@ -5,9 +5,11 @@
 // turns what it returns into the negative, zero or positive int SQLite expects.
 
 #include "sqlitexx/config.hpp"
+#include "sqlitexx/detail/registration_block.hpp"
 #include "sqlitexx/detail/utility.hpp"
 
 #include <cstddef>
+#include <exception>
 #include <type_traits>
 #include <utility>
 
@@ -84,14 +86,16 @@ namespace detail
     {
     };
 
-    template <class F>
+    // Storage: how user_data holds the callable (owned_by_sqlite, or shared_with_token through a registrations token)
+    template <class F, class Storage = owned_by_sqlite<F>>
     class collation_caller
     {
     public:
         using order = collation_order<typename collation_result<F>::type>;
 
         // noexcept: SQLite can't take an error from a comparison, and nothing may unwind through it, so an exception
-        // from the callable ends the program
+        // from the callable ends the program. So does a comparison after the registrations token ended the callable:
+        // comparing any other way could corrupt an index.
         static int compare(
             void* stored,
             int first_size,
@@ -100,8 +104,12 @@ namespace detail
             const void* second
         ) noexcept
         {
-            F& function = *static_cast<F*>(stored);
-            return order::sign(function(
+            F* function = Storage::callable(stored);
+            if (function == nullptr)
+            {
+                std::terminate();
+            }
+            return order::sign((*function)(
                 string_view(static_cast<const char*>(first), static_cast<std::size_t>(first_size)),
                 string_view(static_cast<const char*>(second), static_cast<std::size_t>(second_size))
             ));
@@ -109,7 +117,7 @@ namespace detail
 
         static void destroy(void* stored) noexcept
         {
-            delete static_cast<F*>(stored);
+            Storage::destroy(stored);
         }
     };
 } // detail

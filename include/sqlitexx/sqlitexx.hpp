@@ -24,6 +24,7 @@
 #include "sqlitexx/native/result.hpp"
 #include "sqlitexx/native/statement.hpp"
 #include "sqlitexx/native/value.hpp"
+#include "sqlitexx/registrations.hpp"
 #include "sqlitexx/rows.hpp"
 #include "sqlitexx/statement.hpp"
 #include "sqlitexx/transaction.hpp"

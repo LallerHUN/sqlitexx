@@ -264,6 +264,7 @@ add_library(sqlitexx STATIC
     src/native/result.cpp
     src/native/statement.cpp
     src/native/value.cpp
+    src/registrations.cpp
     src/statement.cpp
     src/transaction.cpp
 )
