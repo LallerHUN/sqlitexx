@@ -6,6 +6,8 @@ All notable changes to sqlitexx are listed here. The format is based on
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-25
+
 ### Added
 
 - `database::create_function(name, callable, flags)`: SQL functions written in C++. Arguments and results go through
@@ -24,7 +26,6 @@ All notable changes to sqlitexx are listed here. The format is based on
   growable container to what was read, or fills a fixed-size buffer without allocating. Both take an optional
   `count`: the most bytes to read, or the first bytes to write. `zeroblob{size}` binds a blob of zero bytes to
   reserve the space without building it in memory. Native layer: `native::blob_handle`.
-
 - With exceptions enabled, running out of memory in sqlitexx is a `primary_code::nomem` error instead of
   `std::bad_alloc`: copying text and blobs, building error messages, and allocating the copies of what
   `create_function` and `create_aggregate` register. Exceptions from user code pass through unchanged.
@@ -90,6 +91,7 @@ All notable changes to sqlitexx are listed here. The format is based on
 - CMake package for `find_package(sqlitexx)`, `FetchContent` and `add_subdirectory`. SQLite 3.54.1 is bundled, or
   the system SQLite is used with `SQLITEXX_USE_SYSTEM_SQLITE=ON`.
 
-[Unreleased]: https://github.com/LallerHUN/sqlitexx/compare/v0.2.0...develop
+[Unreleased]: https://github.com/LallerHUN/sqlitexx/compare/v0.3.0...develop
+[0.3.0]: https://github.com/LallerHUN/sqlitexx/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/LallerHUN/sqlitexx/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/LallerHUN/sqlitexx/releases/tag/v0.1.0
