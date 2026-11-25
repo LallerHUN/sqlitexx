@@ -11,6 +11,9 @@ All notable changes to sqlitexx are listed here. The format is based on
 - `database::create_collation(name, compare)`: collations written in C++, for `COLLATE`, `ORDER BY` and indexes.
   `compare` takes two `string_view`s and returns a negative, zero or positive number, or in C++20 what `operator<=>`
   gives. Native layer: `connection::create_collation`.
+- `database::remove_function(name, argument_count)` and `remove_collation(name)` take back SQL functions, aggregates
+  and collations. SQLite releases its copy at once, so they can refer to state outside them that ends earlier than
+  the database.
 
 ## [0.3.0] - 2026-11-25
 

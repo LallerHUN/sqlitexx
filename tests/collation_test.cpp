@@ -269,6 +269,77 @@ void test_closed_database()
     CHECK(!registered && registered.error().primary() == primary_code::misuse);
 }
 
+void test_remove()
+{
+    int released = 0;
+    database db = open_fruit();
+    CHECK(db.create_collation("ordered", counted(&released, -1)).has_value());
+
+    // Not while a statement runs: busy, and the collation stays
+    expected<statement> running = db.prepare("SELECT name FROM fruit ORDER BY name COLLATE ordered");
+    CHECK(running.has_value());
+    expected<bool> row = running->step();
+    CHECK(row && *row);
+    expected<void> refused = db.remove_collation("ordered");
+    CHECK(!refused && refused.error().primary() == primary_code::busy);
+    CHECK(released == 0);
+    CHECK(running->reset().has_value());
+
+    // Removing releases SQLite's copy at once, and statements using the name fail
+    CHECK(db.remove_collation("ORDERED").has_value());
+    CHECK(released == 1);
+    CHECK(joined(db, "SELECT name FROM fruit ORDER BY name COLLATE ordered") == "error");
+    CHECK(!running->step());
+
+    // Removing what isn't there does nothing, and a removed name can be registered again
+    CHECK(db.remove_collation("never_registered").has_value());
+    CHECK(db.create_collation("ordered", counted(&released, 1)).has_value());
+    CHECK(joined(db, "SELECT name FROM fruit ORDER BY name COLLATE ordered") == "Apple,apricot,banana,cherry");
+
+    database closed;
+    expected<void> not_open = closed.remove_collation("ordered");
+    CHECK(!not_open && not_open.error().primary() == primary_code::misuse);
+}
+
+// What removing is for: a function and a collation that share state outside them, by reference. Removing both
+// before the state ends means SQLite never holds a reference to it past its life.
+struct sort_settings
+{
+    bool descending = false;
+};
+
+void test_shared_state()
+{
+    database db = open_fruit();
+    {
+        sort_settings settings;
+        CHECK(db.create_collation(
+                    "configured",
+                    [&settings](string_view first, string_view second)
+                    {
+                        return settings.descending ? second.compare(first) : first.compare(second);
+                    }
+        ).has_value());
+        CHECK(db.create_function(
+                    "set_descending",
+                    [&settings](bool descending)
+                    {
+                        settings.descending = descending;
+                    }
+        ).has_value());
+
+        CHECK(joined(db, "SELECT name FROM fruit ORDER BY name COLLATE configured") == "Apple,apricot,banana,cherry");
+        CHECK(db.execute("SELECT set_descending(1)").has_value());
+        CHECK(settings.descending);
+        CHECK(joined(db, "SELECT name FROM fruit ORDER BY name COLLATE configured") == "cherry,banana,apricot,Apple");
+
+        CHECK(db.remove_collation("configured").has_value());
+        CHECK(db.remove_function("set_descending", 1).has_value());
+    }
+    // settings is gone, and nothing in SQLite refers to it
+    CHECK(joined(db, "SELECT name FROM fruit ORDER BY name COLLATE configured") == "error");
+}
+
 void test_unknown_collation()
 {
     database db = open_fruit();
@@ -325,6 +396,8 @@ int main()
 #endif
     test_replace_and_release();
     test_closed_database();
+    test_remove();
+    test_shared_state();
     test_unknown_collation();
     test_native();
     return test::summary();

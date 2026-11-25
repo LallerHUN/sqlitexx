@@ -103,6 +103,17 @@ public:
         Compare compare
     ) noexcept(std::is_nothrow_move_constructible<Compare>::value);
 
+    // Removing what create_function, create_aggregate and create_collation registered. SQLite releases its copy of the
+    // callable at once, so state the callable refers to may end after a successful call. A function is known by its
+    // name and its number of parameters (an aggregate's: those of step()). Removing fails with primary_code::busy while
+    // statements are running; removing what isn't registered succeeds and does nothing. Statements prepared earlier
+    // are prepared again before their next step, and those using the name then fail.
+    expected<void> remove_function(
+        cstring_view name,
+        int argument_count
+    ) noexcept;
+    expected<void> remove_collation(cstring_view name) noexcept;
+
     // The native connection underneath, for what the typed layer does not cover
     native::connection& native_connection() noexcept;
     const native::connection& native_connection() const noexcept;

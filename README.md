@@ -296,7 +296,7 @@ sql::expected<std::string> hello = db.prepare("SELECT greet('Alice')").and_then(
 ```
 
 - The callable is a lambda without `auto` parameters, a function object with one `operator()`, or a function pointer.
-  SQLite keeps a copy until the function is replaced or the database closes.
+  SQLite keeps a copy until the function is replaced or removed, or the database closes.
 - NULL arrives only in an `optional<T>` parameter; anywhere else the call fails with `mismatch`. Returning an empty
   `optional<T>`, or returning `void`, gives NULL.
 - To fail the call, return an `expected<T>` holding an error: the statement fails with its code and message. With
@@ -377,8 +377,36 @@ db.execute("CREATE TABLE tag(name TEXT COLLATE by_length UNIQUE)");   // UNIQUE 
   indexes, so an index built with an inconsistent collation, or with one that changed since, is corrupt.
 - SQLite can't take an error from a comparison. With exceptions enabled, an exception from `compare` ends the program
   (`std::terminate`), since it may not unwind through SQLite and an unknown order could corrupt an index.
-- SQLite keeps `compare` until the collation is replaced or the database closes. Registering the same name again
-  replaces it, which fails with `busy` while statements are running.
+- SQLite keeps `compare` until the collation is replaced or removed, or the database closes. Registering the same
+  name again replaces it, which fails with `busy` while statements are running.
+
+### Removing functions and collations
+
+`remove_function(name, argument_count)` and `remove_collation(name)` take back what `create_function`,
+`create_aggregate` and `create_collation` registered. SQLite releases its copy at once, so functions and collations
+can refer to state outside them, shared between them, as long as they are removed before it ends:
+
+```cpp
+struct sort_settings { bool descending = false; } settings;
+
+db.create_collation("configured", [&settings](sql::string_view a, sql::string_view b) {
+    return settings.descending ? b.compare(a) : a.compare(b);
+});
+db.create_function("set_descending", [&settings](bool descending) { settings.descending = descending; });
+
+// ... SELECT set_descending(1); SELECT name FROM fruit ORDER BY name COLLATE configured ...
+
+db.remove_collation("configured");      // before settings ends: nothing in SQLite refers to it afterwards
+db.remove_function("set_descending", 1);
+```
+
+- A function is known by its name and its number of parameters; for an aggregate, those of `step()`.
+- Removing fails with `busy` while statements are running, and then nothing is released. Check the result before
+  ending the shared state.
+- Removing what isn't registered succeeds and does nothing.
+- Statements prepared earlier are prepared again before their next step, so those using the removed name fail then.
+- For state that should simply live as long as SQLite needs it, capture a `std::shared_ptr` instead: no removing
+  needed.
 
 ### Rows as a range
 

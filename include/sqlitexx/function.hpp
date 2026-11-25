@@ -16,9 +16,9 @@
 //  - With exceptions enabled, an exception thrown by the callable fails the call too, with what() as the message;
 //    std::bad_alloc becomes primary_code::nomem. Exceptions never reach SQLite.
 //
-// SQLite keeps a copy of the callable (moved, for an rvalue) until the function is replaced or the database closes. It
-// may be called on any thread that uses the connection, and from inside any statement: a lambda capturing by
-// reference must keep what it refers to alive that long.
+// SQLite keeps a copy of the callable (moved, for an rvalue) until the function is replaced or removed
+// (database::remove_function) or the database closes. It may be called on any thread that uses the connection, and from
+// inside any statement: a lambda capturing by reference must keep what it refers to alive that long.
 //
 // The function takes exactly as many arguments as the callable has parameters; SQLite rejects calls with a different
 // count when the statement is prepared. Registering the same name and count again replaces the function.

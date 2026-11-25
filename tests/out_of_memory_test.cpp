@@ -200,6 +200,8 @@ inline void noexcept_checks(
     SQLITEXX_TEST_NOEXCEPT(db.create_collation("c", backwards()));
     SQLITEXX_TEST_NOT_NOEXCEPT(db.create_collation("c", named_collation));
     SQLITEXX_TEST_NOEXCEPT(db.create_collation("c", backwards_named()));
+    SQLITEXX_TEST_NOEXCEPT(db.remove_function("f", 1));
+    SQLITEXX_TEST_NOEXCEPT(db.remove_collation("c"));
     SQLITEXX_TEST_NOEXCEPT(sqlitexx::execute_with("Alice", 42));
     SQLITEXX_TEST_NOEXCEPT(sqlitexx::execute_with(std::string()));
     SQLITEXX_TEST_NOT_NOEXCEPT(sqlitexx::execute_with(name));

@@ -22,6 +22,7 @@ using sqlitexx::error;
 using sqlitexx::expected;
 using sqlitexx::nullopt;
 using sqlitexx::optional;
+using sqlitexx::statement;
 using sqlitexx::unexpect;
 using sqlitexx::native::extended_code;
 using sqlitexx::native::function_flags;
@@ -424,6 +425,78 @@ void test_move_only()
     CHECK(result && *result == 15);
 }
 
+// An aggregate to remove: counts its rows
+struct counter
+{
+    std::int64_t rows = 0;
+
+    void step(int)
+    {
+        ++rows;
+    }
+
+    std::int64_t finish() const
+    {
+        return rows;
+    }
+};
+
+void test_remove()
+{
+    std::shared_ptr<int> state = std::make_shared<int>(2);
+    database db = open_memory();
+    CHECK(db.create_function(
+                "scaled",
+                [state](int value)
+                {
+                    return value * *state;
+                }
+    ).has_value());
+    CHECK(db.create_function("twice", &twice).has_value());
+    CHECK(db.create_aggregate("counted", counter()).has_value());
+    CHECK(state.use_count() == 2);
+
+    // Not while a statement using the connection runs: busy, and the function stays
+    expected<statement> running = db.prepare("SELECT scaled(1) UNION ALL SELECT scaled(2)");
+    CHECK(running.has_value());
+    expected<bool> row = running->step();
+    CHECK(row && *row);
+    expected<void> refused = db.remove_function("scaled", 1);
+    CHECK(!refused && refused.error().primary() == primary_code::busy);
+    CHECK(state.use_count() == 2);
+    CHECK(running->reset().has_value());
+
+    // Removing releases SQLite's copy at once
+    CHECK(db.remove_function("scaled", 1).has_value());
+    CHECK(state.use_count() == 1);
+    expected<int> gone = select<int>(db, "SELECT scaled(3)");
+    CHECK(!gone && gone.error().primary() == primary_code::error);
+    // The statement prepared before is prepared again, and now fails
+    expected<bool> again = running->step();
+    CHECK(!again);
+
+    // A function is known by its name and number of parameters: another count is a different function
+    CHECK(db.remove_function("twice", 2).has_value());
+    expected<int> kept = select<int>(db, "SELECT twice(4)");
+    CHECK(kept && *kept == 8);
+    CHECK(db.remove_function("TWICE", 1).has_value());
+    CHECK(!select<int>(db, "SELECT twice(4)"));
+
+    // Aggregates go the same way, by the parameters of step()
+    CHECK(db.remove_function("counted", 1).has_value());
+    CHECK(!select<std::int64_t>(db, "SELECT counted(1)"));
+
+    // Removing what isn't there does nothing, and a removed name can be registered again
+    CHECK(db.remove_function("never_registered", 0).has_value());
+    CHECK(db.create_function("twice", &twice).has_value());
+    expected<int> back = select<int>(db, "SELECT twice(5)");
+    CHECK(back && *back == 10);
+
+    database closed;
+    expected<void> not_open = closed.remove_function("twice", 1);
+    CHECK(!not_open && not_open.error().primary() == primary_code::misuse);
+}
+
 #if SQLITEXX_TEST_EXCEPTIONS
 void test_exceptions()
 {
@@ -452,6 +525,7 @@ int main()
     test_own_types();
     test_deterministic();
     test_move_only();
+    test_remove();
 #if SQLITEXX_TEST_EXCEPTIONS
     test_exceptions();
 #endif

@@ -21,8 +21,10 @@
 // exception thrown by the callable ends the program (std::terminate): it may not unwind through SQLite, and carrying on
 // with an unknown order could corrupt an index.
 //
-// SQLite keeps a copy of the callable (moved, for an rvalue) until the collation is replaced or the database closes.
-// Registering the same name again replaces it; that fails with primary_code::busy while statements are running.
+// SQLite keeps a copy of the callable (moved, for an rvalue) until the collation is replaced or removed
+// (database::remove_collation) or the database closes: a lambda capturing by reference must keep what it refers to
+// alive that long. Registering the same name again replaces it; replacing and removing fail with primary_code::busy
+// while statements are running.
 // Names compare like SQL identifiers, without regard to ASCII case.
 
 #include "sqlitexx/database.hpp"
