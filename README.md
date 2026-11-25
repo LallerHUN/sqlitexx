@@ -357,10 +357,11 @@ sql::expected<std::size_t> got = in->read(buffer);   // up to buffer.size(); 0 a
 ```
 
 - `write()` takes any contiguous container of bytes (`std::vector`, `std::string`, `std::array`, `std::span`,
-  `string_view`, C arrays), or a pointer and a size. A count writes only the first bytes.
+  `string_view`, C arrays), or a pointer and a size. `write(data, count)` writes only the first `count` bytes.
 - `read()` into a container that can grow (`std::vector`, `std::string`) sizes it to what was read. Into one that
-  can't (`std::array`, `std::span`, C arrays) it fills up to the size and gives the count, without allocating. A
-  count limits either.
+  can't (`std::array`, `std::span`, C arrays) it fills up to the size, without allocating. `read(out, count)` reads
+  at most `count` bytes.
+- A `count` larger than the container is a `range` error, before anything is read or written.
 - Containers hold bytes: `char`, `signed char`, `unsigned char`, `std::byte` or `char8_t`. Wider elements don't
   compile, since their bytes depend on the machine.
 - `read()` gives how many bytes it read: fewer near the end, 0 at the end. `seek()` moves the position.

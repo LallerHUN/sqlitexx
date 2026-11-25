@@ -22,8 +22,10 @@
 //
 // Containers hold bytes: char, signed char, unsigned char, std::byte (C++17) or char8_t (C++20). Reading into a
 // container that can grow (std::vector, std::string) sizes it to what was read; reading into one that can't
-// (std::array, std::span, a C array) fills it up to its size. Each also takes a count: at most that many bytes. The
-// pointer forms remain for memory that isn't in a container.
+// (std::array, std::span, a C array) fills it up to its size. Reads give the number of bytes read. Each form also
+// takes a `count`: for read(), the most bytes to read; for write(), the first `count` bytes of the container. A count
+// larger than the container is a primary_code::range error. The pointer forms remain for memory that isn't in a
+// container.
 //
 // The stream has a position, like a file: read() and write() continue from it and seek() moves it. When the row
 // changes through another statement, the stream expires: reads and writes fail with primary_code::abort.
@@ -80,8 +82,8 @@ public:
         std::size_t count
     );
 
-    // Reads into a container that grows to fit (std::vector, std::string): the rest of the blob, or at most `count`
-    // bytes. The container ends up the size of what was read, and empty on an error.
+    // Reads into a container that grows to fit (std::vector, std::string): the rest of the blob, or with `count`, at
+    // most that many bytes. Gives the number of bytes read; the container ends up that size, and empty on an error.
     template <
         class Bytes,
         typename std::enable_if<
@@ -105,8 +107,9 @@ public:
         return read_growing(out, count);
     }
 
-    // Reads into a fixed-size buffer (std::array, std::span, a C array) without allocating: up to its size, or at
-    // most `count` bytes, which must fit the buffer. Gives the number of bytes read.
+    // Reads into a fixed-size buffer (std::array, std::span, a C array) without allocating: up to its size, or with
+    // `count`, at most that many bytes, where `count` must not be larger than the buffer. Gives the number of bytes
+    // read.
     template <
         class Bytes,
         typename std::enable_if<
