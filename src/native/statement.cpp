@@ -124,6 +124,17 @@ namespace native
         bool reset_counter
     ) noexcept
     {
+        // Without SQLITE_ENABLE_API_ARMOR, SQLite checks neither the handle nor the counter: an empty statement would
+        // crash, and before 3.38 the filter counters lie past the end of its counter array
+        if (stmt == nullptr)
+        {
+            return 0;
+        }
+        if ((counter == statement_status::filter_miss || counter == statement_status::filter_hit)
+            && sqlite3_libversion_number() < 3038000)
+        {
+            return 0;
+        }
         return sqlite3_stmt_status(stmt, static_cast<int>(counter), reset_counter ? 1 : 0);
     }
 
@@ -241,14 +252,15 @@ namespace native
         return sqlite3_data_count(stmt);
     }
 
+    // Without SQLITE_ENABLE_API_ARMOR, SQLite's column names don't check for an empty statement
     const char* statement::column_name(int index) const noexcept
     {
-        return sqlite3_column_name(stmt, index);
+        return stmt == nullptr ? nullptr : sqlite3_column_name(stmt, index);
     }
 
     const char* statement::column_decltype(int index) const noexcept
     {
-        return sqlite3_column_decltype(stmt, index);
+        return stmt == nullptr ? nullptr : sqlite3_column_decltype(stmt, index);
     }
 
     value_type statement::column_type(int index) const noexcept

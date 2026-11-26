@@ -201,6 +201,10 @@ public:
     template <class T>
     SQLITEXX_DETAIL_NODISCARD expected<T> column(int index) const noexcept(detail::reads_noexcept<T>::value)
     {
+        if (!stmt)
+        {
+            return expected<T>(unexpect, empty_statement());
+        }
         return read_column<T>(index, detail::is_optional<T>());
     }
 
@@ -230,6 +234,10 @@ public:
             sizeof...(T) == 1 || !detail::any_is_record<T...>::value,
             "a record is read on its own: read_row<my_record>(), not alongside other types"
         );
+        if (!stmt)
+        {
+            return expected<row<T...>>(unexpect, empty_statement());
+        }
         return read_row_impl<T...>(std::integral_constant<bool, sizeof...(T) == 1>());
     }
 
@@ -258,6 +266,8 @@ private:
     error no_parameter(const char* name) const noexcept;
     error no_column(string_view name) const noexcept;
     error null_column(int index) const noexcept;
+    /// Reading from a statement that holds none: default-constructed, or moved from
+    error empty_statement() const noexcept;
 
     expected<void> check(native::result code) const noexcept
     {

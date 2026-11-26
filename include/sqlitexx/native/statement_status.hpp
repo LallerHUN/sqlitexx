@@ -3,7 +3,8 @@
 
 /// \file
 /// The counters of statement::status() (sqlite3_stmt_status). Values match SQLITE_STMTSTATUS_* in sqlite3.h. The
-/// filter counters need SQLite 3.38; older versions report 0 for them.
+/// filter counters need SQLite 3.38: before that, status() gives 0 for them without asking SQLite. An empty statement
+/// gives 0 for every counter.
 
 namespace sqlitexx
 {

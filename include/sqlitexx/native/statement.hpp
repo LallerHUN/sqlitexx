@@ -55,7 +55,8 @@ namespace native
         bool readonly() const noexcept;
         bool busy() const noexcept;
         const char* sql() const noexcept;
-        /// sqlite3_stmt_status: the value of a counter, set back to zero afterwards when `reset_counter` is true
+        /// sqlite3_stmt_status: the value of a counter, set back to zero afterwards when `reset_counter` is true; 0 on
+        /// an empty statement
         int status(
             statement_status counter,
             bool reset_counter = false

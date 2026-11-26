@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 project(sqlitexx
-    VERSION 0.7.0
+    VERSION 0.7.1
     DESCRIPTION "C++ wrapper for SQLite"
     LANGUAGES C CXX
 )
