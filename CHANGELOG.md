@@ -6,6 +6,23 @@ All notable changes to sqlitexx are listed here. The format is based on
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-26
+
+### Added
+
+- Rows as structs: `SQLITEXX_FIELDS(user, name, age)` names the members that columns go into, and `user` can then be
+  read wherever a row is read (`query<user>`, `first()`, `all()`, `next()`, `rows<user>()`, `for_each_row<user>`).
+  Fields are filled from the columns by name; a missing column is an error, extra columns are ignored. The macro
+  defines `sqlitexx_fields()`, which can also be written by hand with `sqlitexx::fields` and `sqlitexx::field`.
+- `record_traits<T>`: how a type fills a whole row, as `value_traits` does for one column. Specialize it for types a
+  field list can't fill (no default constructor, computed or checked fields, class templates).
+  `record_builder(row).column<T>(name or index)...build<R>()` reads the columns with the first error winning;
+  `build(factory)` may return an `expected` to reject a row.
+- Records bind as parameters: `db.execute("INSERT INTO user(name, age) VALUES(:name, :age)", dee)` binds each named
+  parameter to the field of its name, in `execute`, `query`, `prepare`, `statement::bind` and `statement::execute`.
+  A parameter without a field, or a positional one, is an error. Hand-written `record_traits` add
+  `bind(statement&, const T&)`, with `record_binder(stmt).bind(name or index, value)...done()`.
+
 ## [0.5.0] - 2026-11-25
 
 ### Added
@@ -136,7 +153,8 @@ All notable changes to sqlitexx are listed here. The format is based on
 - CMake package for `find_package(sqlitexx)`, `FetchContent` and `add_subdirectory`. SQLite 3.54.1 is bundled, or
   the system SQLite is used with `SQLITEXX_USE_SYSTEM_SQLITE=ON`.
 
-[Unreleased]: https://github.com/LallerHUN/sqlitexx/compare/v0.5.0...develop
+[Unreleased]: https://github.com/LallerHUN/sqlitexx/compare/v0.6.0...develop
+[0.6.0]: https://github.com/LallerHUN/sqlitexx/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/LallerHUN/sqlitexx/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/LallerHUN/sqlitexx/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/LallerHUN/sqlitexx/compare/v0.2.0...v0.3.0

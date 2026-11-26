@@ -5,7 +5,7 @@ cmake_minimum_required(VERSION 3.21)
 
 project(sqlitexx_install_test LANGUAGES CXX)
 
-find_package(sqlitexx 0.5 REQUIRED)
+find_package(sqlitexx 0.6 REQUIRED)
 message(STATUS "sqlitexx ${sqlitexx_VERSION} from ${sqlitexx_DIR}, expected: ${sqlitexx_EXPECTED}, string_view and optional: ${sqlitexx_CXX17_TYPES}")
 
 add_executable(consumer consumer.cpp)

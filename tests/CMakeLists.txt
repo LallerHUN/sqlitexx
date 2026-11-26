@@ -10,6 +10,7 @@ foreach(test_name
     native_test
     newer_types_test
     out_of_memory_test
+    records_test
     registrations_test
     rows_test
     typed_test

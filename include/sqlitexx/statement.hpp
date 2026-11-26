@@ -57,15 +57,16 @@ public:
     statement& operator=(const statement&) = delete;
 
     /// \name Binding
-    /// bind() binds its arguments to parameters 1, 2, 3, ... in order. On a temporary statement it gives
-    /// the statement back, ready for the next step in a chain.
+    /// bind() binds its arguments to parameters 1, 2, 3, ... in order, or a record (sqlitexx/record_traits.hpp), on its
+    /// own, to the parameters by name. On a temporary statement it gives the statement back, ready for the next step
+    /// in a chain.
     ///@{
     template <class... Args>
     SQLITEXX_DETAIL_NODISCARD expected<void> bind(const Args&... args) & noexcept(
         detail::all_bind_noexcept<Args...>::value
     )
     {
-        return bind_from(1, args...);
+        return bind_all(args...);
     }
 
     template <class... Args>
@@ -73,7 +74,7 @@ public:
         detail::all_bind_noexcept<Args...>::value
     )
     {
-        expected<void> bound = bind_from(1, args...);
+        expected<void> bound = bind_all(args...);
         if (!bound)
         {
             return expected<statement>(unexpect, std::move(bound.error()));
@@ -121,7 +122,7 @@ public:
     )
     {
         restart();
-        expected<void> bound = bind_from(1, args...);
+        expected<void> bound = bind_all(args...);
         if (!bound)
         {
             return bound;
@@ -214,9 +215,15 @@ public:
     /// The index of the first column with this name; a primary_code::range error when there is none.
     SQLITEXX_DETAIL_NODISCARD expected<int> column_index(string_view name) const noexcept;
 
+    /// The current row: the value for one column, a std::tuple for several, or a record (sqlitexx/record_traits.hpp),
+    /// such as a struct whose fields SQLITEXX_FIELDS names.
     template <class... T>
     SQLITEXX_DETAIL_NODISCARD expected<row<T...>> read_row() const noexcept(detail::row_reads_noexcept<T...>::value)
     {
+        static_assert(
+            sizeof...(T) == 1 || !detail::any_is_record<T...>::value,
+            "a record is read on its own: read_row<my_record>(), not alongside other types"
+        );
         return read_row_impl<T...>(std::integral_constant<bool, sizeof...(T) == 1>());
     }
 
@@ -271,6 +278,62 @@ private:
         return bind_from(index + 1, rest...);
     }
 
+    /// Binding all arguments: a record on its own binds through its record_traits, anything else by position
+    template <class... Args>
+    expected<void> bind_all(const Args&... args) noexcept(detail::all_bind_noexcept<Args...>::value)
+    {
+        static_assert(
+            sizeof...(Args) == 1 || !detail::any_is_record<Args...>::value,
+            "a record binds on its own: bind(my_record), not alongside other values"
+        );
+        return bind_record_or_values(
+            std::integral_constant<bool, sizeof...(Args) == 1 && detail::any_is_record<Args...>::value>(),
+            args...
+        );
+    }
+
+    template <class... Args>
+    expected<void> bind_record_or_values(
+        std::false_type /*record*/,
+        const Args&... args
+    ) noexcept(detail::all_bind_noexcept<Args...>::value)
+    {
+        return bind_from(1, args...);
+    }
+
+    template <class Record>
+    expected<void> bind_record_or_values(
+        std::true_type /*record*/,
+        const Record& value
+    ) noexcept(detail::binds_noexcept<Record>::value)
+    {
+        static_assert(
+            detail::is_bind_record<Record>::value,
+            "this record has no record_traits<T>::bind(): it can be read, but not bound; name its fields with "
+            "SQLITEXX_FIELDS or add bind() to its record_traits"
+        );
+        return bind_record(value, detail::is_bind_record<Record>());
+    }
+
+    template <class Record>
+    expected<void> bind_record(
+        const Record& value,
+        std::true_type /*binds*/
+    ) noexcept(detail::binds_noexcept<Record>::value)
+    {
+        return record_traits<Record>::bind(*this, value);
+    }
+
+    /// Only reached after the static_assert above has failed; keeps the compiler to that one message
+    template <class Record>
+    expected<void> bind_record(
+        const Record&,
+        std::false_type /*binds*/
+    ) noexcept
+    {
+        return {};
+    }
+
     /// Reading
     template <class T>
     expected<T> read_column(
@@ -297,7 +360,25 @@ private:
     template <class T>
     expected<T> read_row_impl(std::true_type /*single column*/) const noexcept(detail::reads_noexcept<T>::value)
     {
+        return read_single<T>(detail::is_record<T>());
+    }
+
+    template <class T>
+    expected<T> read_single(std::false_type /*record*/) const noexcept(detail::reads_noexcept<T>::value)
+    {
         return column<T>(0);
+    }
+
+    /// A record: read by its record_traits
+    template <class T>
+    expected<T> read_single(std::true_type /*record*/) const noexcept(detail::reads_noexcept<T>::value)
+    {
+        static_assert(
+            !detail::has_read_traits<T>::value,
+            "this type has both value_traits and record_traits (or fields): drop one, so it is clear whether it fills "
+            "one column or a row"
+        );
+        return record_traits<T>::read(*this);
     }
 
     template <class... T>
@@ -370,7 +451,9 @@ private:
 
 } // sqlitexx
 
-// rows() returns a rows_range, which needs the complete statement above
+// The record_traits of SQLITEXX_FIELDS structs, and rows(), which returns a rows_range that needs the complete
+// statement above
+#include "sqlitexx/detail/field_record.hpp"
 #include "sqlitexx/rows.hpp"
 
 #endif // SQLITEXX_STATEMENT_HPP
