@@ -26,6 +26,13 @@
 /// constructor, computed or checked fields, or a whole class template through a partial specialization.
 /// sqlitexx/record_builder.hpp reads the columns without an error check after each.
 ///
+/// Binding goes the other way: record_traits<T>::bind(statement&, const T&) binds a T to the statement's
+/// parameters, so a record is an argument wherever values are bound, on its own:
+///
+///     db.execute("INSERT INTO shape(x, y) VALUES(:x, :y)", p);
+///
+/// sqlitexx/record_binder.hpp binds the values without an error check after each.
+///
 /// A record whose read() keeps views into the row (string_view, cstring_view, std::span) declares
 /// `static constexpr bool reads_view = true;`, so the calls that would let such a view dangle refuse it at compile
 /// time, as for value_traits. Records from SQLITEXX_FIELDS get this from their members.
@@ -55,6 +62,21 @@ namespace detail
 
     template <class T>
     struct is_record<T, typename make_void<decltype(record_traits<T>::read(std::declval<const statement&>()))>::type>
+        : std::true_type
+    {
+    };
+
+    /// True when record_traits<T> can bind a T to a statement's parameters
+    template <class T, class Enable = void>
+    struct is_bind_record : std::false_type
+    {
+    };
+
+    template <class T>
+    struct is_bind_record<
+        T,
+        typename make_void<
+            decltype(record_traits<T>::bind(std::declval<statement&>(), std::declval<const T&>()))>::type>
         : std::true_type
     {
     };

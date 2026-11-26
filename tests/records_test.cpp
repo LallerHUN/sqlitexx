@@ -1,5 +1,5 @@
-// Tests for records: SQLITEXX_FIELDS, hand-written field lists, record_traits with record_builder, and reading them
-// everywhere a row is read.
+// Tests for records: SQLITEXX_FIELDS, hand-written field lists, record_traits with record_builder and record_binder,
+// reading them everywhere a row is read and binding them as parameters.
 
 #include "check.hpp"
 #include "sqlitexx/sqlitexx.hpp"
@@ -90,6 +90,14 @@ struct sqlitexx::record_traits<point>
     static expected<point> read(const statement& row)
     {
         return sqlitexx::record_builder(row).column<double>("x").column<double>("y").build<point>();
+    }
+
+    static expected<void> bind(
+        statement& stmt,
+        const point& p
+    )
+    {
+        return sqlitexx::record_binder(stmt).bind(":x", p.x).bind(2, p.y).done();
     }
 };
 
@@ -368,6 +376,82 @@ void test_record_traits()
     CHECK(view && view->label == "a");
 }
 
+void test_binding_fields()
+{
+    database db = open_users();
+    app::user dee;
+    dee.name = "Dee";
+    dee.age = 41;
+
+    // Every parameter from the field of its name; fields without a parameter (id) are left out
+    CHECK(db.execute("INSERT INTO user(name, age) VALUES(:name, :age)", dee).has_value());
+    expected<app::user> read = db.query<app::user>("SELECT * FROM user WHERE name = :name", dee).first();
+    CHECK(read && read->age && *read->age == 41 && read->id == 4);
+
+    // The other prefixes, a parameter used twice, and an empty optional binding NULL
+    app::user eve;
+    eve.name = "Eve";
+    CHECK(db.execute("INSERT INTO user(name, age, note) VALUES(@name, $age, :name)", eve).has_value());
+    expected<std::int64_t> nulls =
+        db.query<std::int64_t>("SELECT count(*) FROM user WHERE name = note AND age IS NULL").first();
+    CHECK(nulls && *nulls == 1);
+
+    // prepare with a record, then run it again with another
+    expected<statement> insert = db.prepare("INSERT INTO user(name, age) VALUES(:name, :age)", dee);
+    CHECK(insert.has_value());
+    if (insert)
+    {
+        CHECK(db.execute("DELETE FROM user WHERE name = ?", "Dee").has_value());
+        expected<bool> ran = insert->step(); // runs with dee bound by prepare
+        CHECK(ran && !*ran);
+        eve.name = "Fay";
+        CHECK(insert->execute(eve).has_value());
+    }
+    expected<std::int64_t> count = db.query<std::int64_t>("SELECT count(*) FROM user").first();
+    CHECK(count && *count == 6);
+}
+
+void test_binding_errors()
+{
+    database db = open_users();
+    app::user dee;
+    dee.name = "Dee";
+
+    // A parameter without a field, and a positional parameter: never left NULL by accident
+    expected<void> unknown = db.execute("INSERT INTO user(name, note) VALUES(:name, :note)", dee);
+    CHECK(!unknown && unknown.error().primary() == primary_code::range);
+    CHECK(!unknown && unknown.error().message() == "the record has no field for parameter :note");
+    expected<void> positional = db.execute("INSERT INTO user(name, age) VALUES(:name, ?)", dee);
+    CHECK(!positional && positional.error().primary() == primary_code::range);
+
+    // Field names compare exactly, as SQLite compares parameter names
+    expected<void> wrong_case = db.execute("INSERT INTO user(name) VALUES(:Name)", dee);
+    CHECK(!wrong_case && wrong_case.error().primary() == primary_code::range);
+
+    expected<std::int64_t> count = db.query<std::int64_t>("SELECT count(*) FROM user").first();
+    CHECK(count && *count == 3);
+}
+
+void test_record_binder()
+{
+    database db = open_users();
+    CHECK(db.execute("CREATE TABLE shape(x REAL, y REAL)").has_value());
+
+    // By name and by index
+    CHECK(db.execute("INSERT INTO shape(x, y) VALUES(:x, :y)", point(1.5, 2.5)).has_value());
+    expected<point> read = db.query<point>("SELECT x, y FROM shape").first();
+    CHECK(read && read->x == 1.5 && read->y == 2.5);
+
+    // A parameter that got no value fails done(); the first error wins
+    expected<void> missing = db.execute("INSERT INTO shape(x, y) VALUES(:x, :y + :z)", point(1, 2));
+    CHECK(!missing && missing.error().primary() == primary_code::range);
+    expected<void> unknown = db.execute("INSERT INTO shape(x, y) VALUES(:a, :b)", point(1, 2));
+    CHECK(!unknown && unknown.error().primary() == primary_code::range);
+
+    expected<std::int64_t> count = db.query<std::int64_t>("SELECT count(*) FROM shape").first();
+    CHECK(count && *count == 1);
+}
+
 } // anonymous
 
 int main()
@@ -377,6 +461,9 @@ int main()
     test_errors();
     test_everywhere_a_row_is_read();
     test_record_traits();
+    test_binding_fields();
+    test_binding_errors();
+    test_record_binder();
 
     return test::summary();
 }
