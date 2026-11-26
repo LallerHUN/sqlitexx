@@ -6,12 +6,19 @@ All notable changes to sqlitexx are listed here. The format is based on
 
 ## [Unreleased]
 
+### Added
+
+- `native::statement::status(counter, reset)` mirrors `sqlite3_stmt_status`, with the counters in
+  `native::statement_status`.
+
 ### Changed
 
 - `query` and `execute(sql, args...)` keep the statements they prepare in a cache, keyed by the exact SQL text, so
   running the same SQL again doesn't prepare it again. Statements go back reset and with their bindings cleared; the
-  least recently used is finalized when the cache is full, and at most two copies of one SQL text are kept. `database::statement_cache_size(n)` sets the size (16 by
-  default, 0 turns it off). `prepare()` is never cached.
+  least recently used is finalized when the cache is full, and at most two copies of one SQL text are kept.
+  `database::statement_cache_size(n)` sets the size (16 by default, 0 turns it off). `prepare()` is never cached.
+- A record from `SQLITEXX_FIELDS` looks its columns up by name on the first row, not on every row, and keeps them
+  with the statement until a schema change prepares it again.
 
 ## [0.6.0] - 2026-11-26
 

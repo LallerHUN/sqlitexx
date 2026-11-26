@@ -4,6 +4,7 @@
 /// \file
 /// The record_traits of a struct whose fields SQLITEXX_FIELDS names: each field from the column with its name.
 
+#include "sqlitexx/detail/column_lookup.hpp"
 #include "sqlitexx/detail/noexcept_traits.hpp"
 #include "sqlitexx/detail/parameter_errors.hpp"
 #include "sqlitexx/detail/row_fields.hpp"
@@ -22,9 +23,9 @@ template <class T>
 struct record_traits<T, typename std::enable_if<detail::has_fields<T>::value>::type>
 {
     /// Makes a T and fills each field from the column with its name. A field without a column is the
-    /// primary_code::range error that column_index() gives; columns without a field are ignored.
-    template <class Source>
-    static expected<T> read(const Source& row) noexcept(
+    /// primary_code::range error that column_index() gives; columns without a field are ignored. The columns are
+    /// looked up on the first row and kept with the statement for the rows after it.
+    static expected<T> read(const statement& row) noexcept(
         detail::fields_read_noexcept<
             T,
             typename detail::field_member_types<typename detail::field_list<T>::type>::type>::value
@@ -37,9 +38,14 @@ struct record_traits<T, typename std::enable_if<detail::has_fields<T>::value>::t
         );
         using list_type = typename detail::field_list<T>::type;
         const list_type list = sqlitexx_fields(static_cast<const T*>(nullptr));
+        expected<const int*> columns = detail::column_lookup::find<T>(row, list);
+        if (!columns)
+        {
+            return expected<T>(unexpect, std::move(columns.error()));
+        }
         T value{};
         expected<void> filled =
-            fill<0>(row, value, list, std::integral_constant<bool, std::tuple_size<list_type>::value == 0>());
+            fill<0>(row, *columns, value, list, std::integral_constant<bool, std::tuple_size<list_type>::value == 0>());
         if (!filled)
         {
             return expected<T>(unexpect, std::move(filled.error()));
@@ -142,10 +148,10 @@ private:
 
     template <
         std::size_t I,
-        class Source,
         class List>
     static expected<void> fill(
-        const Source&,
+        const statement&,
+        const int*,
         T&,
         const List&,
         std::true_type /*past the end*/
@@ -154,12 +160,13 @@ private:
         return {};
     }
 
+    /// Fills field I from its kept column, or from the column it looks up when none are kept (out of memory)
     template <
         std::size_t I,
-        class Source,
         class List>
     static expected<void> fill(
-        const Source& row,
+        const statement& row,
+        const int* columns,
         T& value,
         const List& list,
         std::false_type /*past the end*/
@@ -171,7 +178,7 @@ private:
         using field_type = typename std::tuple_element<I, List>::type;
         using member = typename detail::field_member<field_type>::type;
         const field_type& field = std::get<I>(list);
-        expected<int> index = row.column_index(field.name);
+        expected<int> index = columns != nullptr ? expected<int>(columns[I]) : row.column_index(field.name);
         if (!index)
         {
             return expected<void>(unexpect, std::move(index.error()));
@@ -182,7 +189,13 @@ private:
             return expected<void>(unexpect, std::move(read.error()));
         }
         value.*(field.member) = std::move(*read);
-        return fill<I + 1>(row, value, list, std::integral_constant<bool, I + 1 == std::tuple_size<List>::value>());
+        return fill<I + 1>(
+            row,
+            columns,
+            value,
+            list,
+            std::integral_constant<bool, I + 1 == std::tuple_size<List>::value>()
+        );
     }
 };
 } // sqlitexx
