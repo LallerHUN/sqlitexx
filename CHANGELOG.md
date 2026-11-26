@@ -12,6 +12,10 @@ All notable changes to sqlitexx are listed here. The format is based on
   read wherever a row is read (`query<user>`, `first()`, `all()`, `next()`, `rows<user>()`, `for_each_row<user>`).
   Fields are filled from the columns by name; a missing column is an error, extra columns are ignored. The macro
   defines `sqlitexx_fields()`, which can also be written by hand with `sqlitexx::fields` and `sqlitexx::field`.
+- `record_traits<T>`: how a type fills a whole row, as `value_traits` does for one column. Specialize it for types a
+  field list can't fill (no default constructor, computed or checked fields, class templates).
+  `record_builder(row).column<T>(name or index)...build<R>()` reads the columns with the first error winning;
+  `build(factory)` may return an `expected` to reject a row.
 
 ## [0.5.0] - 2026-11-25
 

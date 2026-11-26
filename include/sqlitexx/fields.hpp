@@ -29,8 +29,9 @@
 ///         return sqlitexx::fields(sqlitexx::field("name", &user::name), sqlitexx::field("years", &user::age));
 ///     }
 ///
-/// A struct is read on its own: query<user> and rows<user>, not alongside other types. A type with fields must not
-/// also have value_traits.
+/// A struct with fields is a record (sqlitexx/record_traits.hpp): it is read on its own, query<user> and rows<user>,
+/// not alongside other types, and must not also have value_traits. For a type the field list can't fill (no default
+/// constructor, computed or checked fields), specialize record_traits instead, with sqlitexx/record_builder.hpp.
 
 #include <tuple>
 

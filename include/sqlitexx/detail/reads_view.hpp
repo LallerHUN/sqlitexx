@@ -10,6 +10,7 @@
 #include "sqlitexx/detail/noexcept_traits.hpp"
 #include "sqlitexx/detail/row_fields.hpp"
 #include "sqlitexx/detail/utility.hpp"
+#include "sqlitexx/record_traits.hpp"
 #include "sqlitexx/value.hpp"
 
 #include <tuple>
@@ -57,9 +58,31 @@ namespace detail
     {
     };
 
+    /// A record's own word on it: `static constexpr bool reads_view = true;` in its record_traits
+    template <class T, class Enable = void>
+    struct declared_record_view : std::false_type
+    {
+    };
+
     template <class T>
-    struct reads_view<T, typename std::enable_if<has_fields<T>::value>::type>
+    struct declared_record_view<T, typename make_void<decltype(record_traits<T>::reads_view)>::type>
+        : std::integral_constant<bool, record_traits<T>::reads_view>
+    {
+    };
+
+    template <class T, bool Fields = has_fields<T>::value>
+    struct record_reads_view : declared_record_view<T>
+    {
+    };
+
+    template <class T>
+    struct record_reads_view<T, true>
         : any_member_reads_view<typename field_member_types<typename field_list<T>::type>::type>
+    {
+    };
+
+    template <class T>
+    struct reads_view<T, typename std::enable_if<is_record<T>::value>::type> : record_reads_view<T>
     {
     };
 } // detail

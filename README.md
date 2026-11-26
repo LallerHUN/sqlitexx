@@ -408,6 +408,38 @@ inline auto sqlitexx_fields(const user*)
 }
 ```
 
+For what a field list can't fill, specialize `record_traits`, the row-sized counterpart of `value_traits`: a type
+without a default constructor, computed or checked fields, or a whole class template through a partial
+specialization. `record_builder` reads the columns one after the other, and the first error wins, so there is no
+check after each:
+
+```cpp
+struct point
+{
+    point(double x, double y);
+    double x, y;
+};
+
+template <>
+struct sqlitexx::record_traits<point>
+{
+    static sql::expected<point> read(const sql::statement& row)
+    {
+        return sql::record_builder(row)
+            .column<double>("x")       // by name, or by index: .column<double>(0)
+            .column<double>("y")
+            .build<point>();           // point(x, y), or point{x, y} for an aggregate
+    }
+};
+```
+
+- `build(factory)` instead calls `factory(values...)`. The factory may return an `expected`, to reject a row with an
+  error of its own.
+- A record is read wherever a row is read, on its own, and must not also have `value_traits`; the structs that
+  `SQLITEXX_FIELDS` names are records through the default `record_traits`.
+- A hand-written record whose `read()` keeps views into the row says so with `static constexpr bool reads_view =
+  true;`, for the same compile-time checks as a view.
+
 ### Chaining helpers
 
 | Helper | Use with | Does |

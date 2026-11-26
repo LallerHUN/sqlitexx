@@ -5,12 +5,12 @@ foreach(test_name
     busy_timeout_test
     collation_test
     cstring_view_test
-    fields_test
     function_test
     hooks_test
     native_test
     newer_types_test
     out_of_memory_test
+    records_test
     registrations_test
     rows_test
     typed_test

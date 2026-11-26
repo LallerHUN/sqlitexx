@@ -1,4 +1,5 @@
-// Tests for rows as structs: SQLITEXX_FIELDS, hand-written field lists, and reading them everywhere a row is read.
+// Tests for records: SQLITEXX_FIELDS, hand-written field lists, record_traits with record_builder, and reading them
+// everywhere a row is read.
 
 #include "check.hpp"
 #include "sqlitexx/sqlitexx.hpp"
@@ -23,12 +24,9 @@ struct user
     optional<int> age;
     std::int64_t id = 0;
 };
-SQLITEXX_FIELDS(
-    user,
-    name,
-    age,
-    id
-)
+// clang-format off
+SQLITEXX_FIELDS(user, name, age, id)
+// clang-format on
 
 // A field whose column has another name, written by hand: the macro's C++11 form
 struct renamed
@@ -56,10 +54,9 @@ struct name_view
 {
     sqlitexx::string_view name;
 };
-SQLITEXX_FIELDS(
-    name_view,
-    name
-)
+// clang-format off
+SQLITEXX_FIELDS(name_view, name)
+// clang-format on
 } // app
 
 // In the global namespace, found the same way
@@ -67,10 +64,126 @@ struct counted
 {
     std::int64_t n = 0;
 };
-SQLITEXX_FIELDS(
-    counted,
-    n
-)
+// clang-format off
+SQLITEXX_FIELDS(counted, n)
+// clang-format on
+
+// No default constructor: SQLITEXX_FIELDS can't fill it, record_traits with the builder can
+struct point
+{
+    point(
+        double from_x,
+        double from_y
+    )
+        : x(from_x),
+          y(from_y)
+    {
+    }
+
+    double x;
+    double y;
+};
+
+template <>
+struct sqlitexx::record_traits<point>
+{
+    static expected<point> read(const statement& row)
+    {
+        return sqlitexx::record_builder(row).column<double>("x").column<double>("y").build<point>();
+    }
+};
+
+// An aggregate built with braces, by column index, and a factory that checks the row
+struct span_row
+{
+    int from;
+    int to;
+};
+
+template <>
+struct sqlitexx::record_traits<span_row>
+{
+    static expected<span_row> read(const statement& row)
+    {
+        return sqlitexx::record_builder(row).column<int>(0).column<int>(1).build(
+            [](int from, int to) -> expected<span_row>
+            {
+                if (from > to)
+                {
+                    return expected<span_row>(
+                        sqlitexx::unexpect,
+                        sqlitexx::error(
+                            sqlitexx::native::result(static_cast<int>(primary_code::constraint)),
+                            "span ends before it starts"
+                        )
+                    );
+                }
+                return span_row{from, to};
+            }
+        );
+    }
+};
+
+// A whole class template through a partial specialization
+template <class First, class Second>
+struct labeled
+{
+    First label;
+    Second value;
+};
+
+template <class First, class Second>
+struct sqlitexx::record_traits<labeled<First, Second>>
+{
+    static expected<labeled<
+        First,
+        Second>>
+    read(const statement& row)
+    {
+        return sqlitexx::record_builder(row)
+            .template column<First>("label")
+            .template column<Second>("value")
+            .template build<labeled<First, Second>>();
+    }
+};
+
+// A hand-written record that keeps a view says so
+struct label_view
+{
+    sqlitexx::string_view label;
+};
+
+template <>
+struct sqlitexx::record_traits<label_view>
+{
+    static constexpr bool reads_view = true;
+
+    static expected<label_view> read(const statement& row)
+    {
+        return sqlitexx::record_builder(row).column<sqlitexx::string_view>("label").build<label_view>();
+    }
+};
+
+static_assert(
+    sqlitexx::detail::is_record<point>::value,
+    "point has record_traits"
+);
+static_assert(
+    sqlitexx::detail::is_record<app::user>::value,
+    "SQLITEXX_FIELDS makes a record"
+);
+static_assert(
+    !sqlitexx::detail::is_record<int>::value,
+    "int is a value"
+);
+static_assert(
+    sqlitexx::detail::reads_view<label_view>::value,
+    "label_view says it keeps a view"
+);
+static_assert(
+    !sqlitexx::detail::reads_view<point>::value,
+    "point owns its values"
+);
 
 static_assert(
     sqlitexx::detail::has_fields<app::user>::value,
@@ -205,6 +318,56 @@ void test_everywhere_a_row_is_read()
     expected<app::name_view> view = views.first();
     CHECK(view && view->name == "Alice");
 }
+void test_record_traits()
+{
+    database db = open_users();
+    CHECK(db.execute(
+                "CREATE TABLE shape(x REAL, y REAL, label TEXT, value INTEGER);"
+                "INSERT INTO shape VALUES(1.5, 2.5, 'a', 1), (3, NULL, 'b', 2);"
+                "CREATE TABLE span(a INTEGER, b INTEGER);"
+                "INSERT INTO span VALUES(1, 5), (7, 2);"
+    )
+              .has_value());
+
+    // A constructor with arguments
+    expected<point> first = db.query<point>("SELECT x, y FROM shape ORDER BY rowid").first();
+    CHECK(first && first->x == 1.5 && first->y == 2.5);
+
+    // The first error wins: y is NULL in the second row
+    expected<std::vector<point>> all = db.query<point>("SELECT y, x FROM shape ORDER BY rowid").all();
+    CHECK(!all && all.error().primary() == primary_code::mismatch);
+    expected<point> missing = db.query<point>("SELECT x FROM shape").first();
+    CHECK(!missing && missing.error().primary() == primary_code::range);
+
+    // By index, braces, and a factory's own error
+    std::vector<int> ends;
+    int rejected = 0;
+    for (expected<span_row>& span : db.query<span_row>("SELECT a, b FROM span ORDER BY rowid"))
+    {
+        if (span)
+        {
+            ends.push_back(span->to);
+        }
+        else
+        {
+            CHECK(span.error().primary() == primary_code::constraint);
+            CHECK(span.error().message() == "span ends before it starts");
+            ++rejected;
+        }
+    }
+    CHECK((ends == std::vector<int>{5}) && rejected == 1);
+
+    // A class template
+    expected<labeled<std::string, int>> label =
+        db.query<labeled<std::string, int>>("SELECT label, value FROM shape WHERE value = ?", 2).first();
+    CHECK(label && label->label == "b" && label->value == 2);
+
+    // A hand-written view record on a named results
+    sqlitexx::results<label_view> views = db.query<label_view>("SELECT label FROM shape ORDER BY rowid");
+    expected<label_view> view = views.first();
+    CHECK(view && view->label == "a");
+}
+
 } // anonymous
 
 int main()
@@ -213,6 +376,7 @@ int main()
     test_hand_written_fields();
     test_errors();
     test_everywhere_a_row_is_read();
+    test_record_traits();
 
     return test::summary();
 }
