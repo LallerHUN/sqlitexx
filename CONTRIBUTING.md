@@ -193,13 +193,17 @@ and fixes found during the release land in one place.
    appears (README, `tests/install`, the install comment in `CMakeLists.txt`). In CHANGELOG.md, turn
    `## [Unreleased]` into `## [X.Y.Z] - YYYY-MM-DD` with a new empty `[Unreleased]` above it, and update the
    compare links at the bottom. Push.
-2. Open a pull request from `release/vX.Y.Z` into `main`. Anything that has to change for the release, such as a fix
-   CI turns up, is committed to the release branch; features stay on `develop` for the next release.
-3. When CI passes, merge it into `main`. Put an annotated tag `vX.Y.Z` on that merge commit and publish a GitHub
-   release with notes: the version's CHANGELOG.md section, plus requirements and known limits.
-4. Open a pull request from `release/vX.Y.Z` into `develop` and merge it, so the version and any release fixes reach
+2. Open a pull request from `release/vX.Y.Z` into `main`, and write the release notes while CI runs: the version's
+   CHANGELOG.md section, plus upgrading steps, requirements and known limits. Anything that has to change for the
+   release, such as a fix CI or the review turns up, is committed to the release branch; features stay on `develop`
+   for the next release.
+3. Review the pull request and the notes together, before merging. `main` holds only tagged releases, so nothing is
+   merged into it that can't be tagged right away.
+4. When CI passes and the review is done, merge it into `main`, put an annotated tag `vX.Y.Z` on that merge commit,
+   and publish the GitHub release with the reviewed notes, one step after the other.
+5. Open a pull request from `release/vX.Y.Z` into `develop` and merge it, so the version and any release fixes reach
    `develop` too. The release is finished only after this step: skipping it leaves `develop` behind `main`.
-5. Delete the release branch.
+6. Delete the release branch.
 
 ### Patch releases
 
