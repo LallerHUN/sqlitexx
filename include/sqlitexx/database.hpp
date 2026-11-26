@@ -5,8 +5,10 @@
 #include "sqlitexx/blob_stream.hpp"
 #include "sqlitexx/config.hpp"
 #include "sqlitexx/cstring_view.hpp"
+#include "sqlitexx/detail/cache_lease.hpp"
 #include "sqlitexx/detail/hook_slots.hpp"
 #include "sqlitexx/detail/noexcept_traits.hpp"
+#include "sqlitexx/detail/statement_cache.hpp"
 #include "sqlitexx/error.hpp"
 #include "sqlitexx/expected.hpp"
 #include "sqlitexx/native/connection.hpp"
@@ -54,7 +56,9 @@ public:
     ///     expected<std::int64_t> count = db.query<std::int64_t>("SELECT count(*) FROM user").first();
     ///     expected<void> added = db.execute("INSERT INTO user(name, age) VALUES(?, ?)", "Dee", 41);
     ///
-    /// query() and execute(sql, args...) prepare the SQL on every call; for SQL run many times, prepare it once.
+    /// query() and execute(sql, args...) keep the statements they prepare in a cache, keyed by the exact SQL text, so
+    /// running the same SQL again doesn't prepare it again (see statement_cache_size()). prepare() always prepares a
+    /// statement of your own.
     ///@{
 
     /// The rows of one statement, with its parameters bound to `args`: one column per type, read as you iterate
@@ -68,7 +72,7 @@ public:
     ) noexcept(detail::all_bind_noexcept<Args...>::value)
     {
         static_assert(sizeof...(T) > 0, "query<T...>: name the type of each column to read");
-        return results<T...>(prepare_bound(sql, args...));
+        return results<T...>(lend_bound(sql, args...));
     }
 
     SQLITEXX_DETAIL_NODISCARD expected<void> execute(const char* sql) noexcept;
@@ -86,12 +90,14 @@ public:
                        First,
                        Rest...>::value)
     {
-        expected<statement> prepared = prepare(sql);
-        if (!prepared)
+        detail::lent_statement lent = lend(sql);
+        if (!lent.stmt)
         {
-            return expected<void>(unexpect, std::move(prepared.error()));
+            return expected<void>(unexpect, std::move(lent.stmt.error()));
         }
-        return prepared->execute(first, rest...);
+        expected<void> ran = lent.stmt->execute(first, rest...);
+        lent.lease.give_back(std::move(*lent.stmt));
+        return ran;
     }
 
     SQLITEXX_DETAIL_NODISCARD expected<statement> prepare(string_view sql) noexcept;
@@ -127,6 +133,17 @@ public:
     /// std::chrono::seconds(5).
     ///@{
     SQLITEXX_DETAIL_NODISCARD expected<void> busy_timeout(std::chrono::milliseconds timeout) noexcept;
+    ///@}
+
+    /// \name Statement cache
+    /// How many idle statements query() and execute(sql, args...) keep for running the same SQL again: 16 when a
+    /// database opens, 0 to turn the cache off. When it is full, the statement used longest ago is finalized; making
+    /// it smaller finalizes the oldest ones at once. A statement a results still holds is not in the cache: running
+    /// the same SQL meanwhile prepares another one. Of one SQL text, at most two idle copies are kept, so several
+    /// results of the same query at once don't push the other statements out.
+    ///@{
+    void statement_cache_size(std::size_t statements) noexcept;
+    std::size_t statement_cache_size() const noexcept;
     ///@}
 
     /// \name Backup
@@ -288,8 +305,41 @@ private:
     native::connection db;
     /// Created with the first hook. Declared after the connection: it clears the hooks before the connection closes.
     std::unique_ptr<detail::hook_slots> hooks;
+    /// Created with the first query() or execute(sql, args...). Declared after the connection: its statements are
+    /// finalized before the connection closes. Shared so that a results can give its statement back, weakly, in case
+    /// it outlives the database.
+    std::shared_ptr<detail::statement_cache> cache;
+    std::size_t cache_capacity = 16;
 
     explicit database(native::connection&& opened) noexcept;
+
+    /// A statement for `sql` from the cache, or freshly prepared, with where to give it back
+    detail::lent_statement lend(string_view sql) noexcept;
+
+    /// lend(sql), then bind(args...); a statement that doesn't bind goes back at once
+    template <class... Args>
+    detail::lent_statement lend_bound(
+        string_view sql,
+        const Args&... args
+    ) noexcept(detail::all_bind_noexcept<Args...>::value)
+    {
+        detail::lent_statement lent = lend(sql);
+        if (lent.stmt)
+        {
+            expected<void> bound = lent.stmt->bind(args...);
+            if (!bound)
+            {
+                lent.lease.give_back(std::move(*lent.stmt));
+                lent.stmt = expected<statement>(unexpect, std::move(bound.error()));
+            }
+        }
+        return lent;
+    }
+
+    expected<statement> prepare_with(
+        string_view sql,
+        native::prepare_flags flags
+    ) noexcept;
 
     /// prepare(sql), then bind(args...), for any number of arguments
     template <class... Args>

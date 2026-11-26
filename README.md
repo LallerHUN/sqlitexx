@@ -373,8 +373,12 @@ sql::expected<sql::statement> insert = db.prepare("INSERT INTO user(name, age) V
 
 - `execute(sql)` without arguments runs a script of several statements. With arguments, `execute`, `query` and
   `prepare` take one statement, and SQL holding more is a `misuse` error, as with `prepare(sql)`.
-- `query` and `execute` prepare the SQL on every call. For SQL you run many times, prepare it once (with or without
-  arguments) and call `statement::execute(args...)`, `first()` or `rows()` on it.
+- `query` and `execute` with arguments keep the statements they prepare in a cache, keyed by the exact SQL text, so
+  running them in a loop prepares the SQL once. A statement goes back reset and with its bindings cleared when the
+  call or the `results` ends; when the cache is full (16 statements, `db.statement_cache_size(n)` to change it, 0
+  to turn it off), the one used longest ago is finalized. Of one SQL text it keeps at most two copies, so many
+  `results` of the same query at once don't push the other statements out. `prepare()` is never cached: the
+  statement it gives is yours.
 
 ### Rows as structs
 

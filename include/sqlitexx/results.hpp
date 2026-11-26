@@ -28,6 +28,7 @@
 /// read one step at a time; nothing is cached or read ahead.
 
 #include "sqlitexx/config.hpp"
+#include "sqlitexx/detail/cache_lease.hpp"
 #include "sqlitexx/detail/out_of_memory.hpp"
 #include "sqlitexx/detail/reads_view.hpp"
 #include "sqlitexx/error.hpp"
@@ -56,10 +57,38 @@ public:
     using value_type = expected<row<T...>>;
     using iterator = typename rows_range<T...>::iterator;
 
-    results(results&&) noexcept = default;
-    results& operator=(results&&) noexcept = default;
+    /// \name Lifetime
+    /// The statement goes back to its database's statement cache when the results end, or is finalized when the
+    /// database is gone. Moving starts no loop over: a loop must not run across a move.
+    ///@{
+    results(results&& other) noexcept
+        : source(std::move(other.source)),
+          paging(other.paging),
+          lease(std::move(other.lease))
+    {
+    }
+
+    results& operator=(results&& other) noexcept
+    {
+        if (this != &other)
+        {
+            give_back();
+            pass = nullopt;
+            source = std::move(other.source);
+            paging = other.paging;
+            lease = std::move(other.lease);
+        }
+        return *this;
+    }
+
     results(const results&) = delete;
     results& operator=(const results&) = delete;
+
+    ~results()
+    {
+        give_back();
+    }
+    ///@}
 
     /// \name Iteration
     /// begin() runs the query from the start; elements are as in rows().
@@ -211,12 +240,23 @@ private:
     /// The current loop's range; its iterators point into it
     optional<rows_range<T...>> pass;
     page_state paging = page_state::closed;
+    /// Where the statement goes back to: the database's statement cache, if it still exists
+    detail::cache_lease lease;
 
     friend class database;
 
-    explicit results(expected<statement>&& prepared) noexcept
-        : source(std::move(prepared))
+    explicit results(detail::lent_statement&& lent) noexcept
+        : source(std::move(lent.stmt)),
+          lease(std::move(lent.lease))
     {
+    }
+
+    void give_back() noexcept
+    {
+        if (source)
+        {
+            lease.give_back(std::move(*source));
+        }
     }
 
     /// Back to the start, keeping the bindings. reset() reports how the previous run ended, which that run already

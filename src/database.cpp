@@ -53,9 +53,17 @@ expected<void> database::execute(const char* sql) noexcept
 
 expected<statement> database::prepare(string_view sql) noexcept
 {
+    return prepare_with(sql, native::prepare_flags::none);
+}
+
+expected<statement> database::prepare_with(
+    string_view sql,
+    native::prepare_flags flags
+) noexcept
+{
     native::statement prepared;
     string_view tail;
-    const native::result code = db.prepare(sql, prepared, native::prepare_flags::none, &tail);
+    const native::result code = db.prepare(sql, prepared, flags, &tail);
     if (code.failed())
     {
         return expected<statement>(unexpect, failure(code));
@@ -86,6 +94,76 @@ expected<statement> database::prepare(string_view sql) noexcept
         }
     }
     return statement(std::move(prepared));
+}
+
+void database::statement_cache_size(std::size_t statements) noexcept
+{
+    cache_capacity = statements;
+    if (cache)
+    {
+        cache->resize(statements);
+    }
+}
+
+std::size_t database::statement_cache_size() const noexcept
+{
+    return cache_capacity;
+}
+
+detail::lent_statement database::lend(string_view sql) noexcept
+{
+    if (cache_capacity == 0)
+    {
+        return detail::lent_statement{prepare(sql), detail::cache_lease()};
+    }
+    // Running out of memory for the cache or its key only means the statement isn't kept
+#if SQLITEXX_DETAIL_EXCEPTIONS
+    if (!cache)
+    {
+        try
+        {
+            cache = std::make_shared<detail::statement_cache>(cache_capacity);
+        }
+        catch (const std::bad_alloc&)
+        {
+            return detail::lent_statement{prepare(sql), detail::cache_lease()};
+        }
+    }
+#else
+    if (!cache)
+    {
+        cache = std::make_shared<detail::statement_cache>(cache_capacity);
+    }
+#endif
+
+    std::string key;
+    statement taken;
+    if (cache->take(sql, key, taken))
+    {
+        return detail::lent_statement{
+            expected<statement>(std::move(taken)),
+            detail::cache_lease(cache, std::move(key))
+        };
+    }
+
+    expected<statement> prepared = prepare_with(sql, native::prepare_flags::persistent);
+    if (!prepared)
+    {
+        return detail::lent_statement{std::move(prepared), detail::cache_lease()};
+    }
+#if SQLITEXX_DETAIL_EXCEPTIONS
+    try
+    {
+        key.assign(sql.data(), sql.size());
+    }
+    catch (const std::bad_alloc&)
+    {
+        return detail::lent_statement{std::move(prepared), detail::cache_lease()};
+    }
+#else
+    key.assign(sql.data(), sql.size());
+#endif
+    return detail::lent_statement{std::move(prepared), detail::cache_lease(cache, std::move(key))};
 }
 
 std::int64_t database::last_insert_rowid() const noexcept
@@ -233,10 +311,13 @@ database& database::operator=(database&& other) noexcept
 {
     if (this != &other)
     {
-        // The hooks go first, while their connection is still open
+        // The hooks and the cached statements go first, while their connection is still open
         hooks.reset();
+        cache.reset();
         db = std::move(other.db);
         hooks = std::move(other.hooks);
+        cache = std::move(other.cache);
+        cache_capacity = other.cache_capacity;
     }
     return *this;
 }
