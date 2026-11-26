@@ -28,6 +28,7 @@
 #include "sqlitexx/native/result.hpp"
 #include "sqlitexx/native/statement.hpp"
 #include "sqlitexx/native/value.hpp"
+#include "sqlitexx/record_binder.hpp"
 #include "sqlitexx/record_builder.hpp"
 #include "sqlitexx/record_traits.hpp"
 #include "sqlitexx/registrations.hpp"

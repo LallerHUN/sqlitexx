@@ -5,11 +5,13 @@
 /// The record_traits of a struct whose fields SQLITEXX_FIELDS names: each field from the column with its name.
 
 #include "sqlitexx/detail/noexcept_traits.hpp"
+#include "sqlitexx/detail/parameter_errors.hpp"
 #include "sqlitexx/detail/row_fields.hpp"
 #include "sqlitexx/expected.hpp"
 #include "sqlitexx/record_traits.hpp"
 
 #include <cstddef>
+#include <cstring>
 #include <tuple>
 #include <type_traits>
 #include <utility>
@@ -45,7 +47,99 @@ struct record_traits<T, typename std::enable_if<detail::has_fields<T>::value>::t
         return expected<T>(std::move(value));
     }
 
+    /// Binds every parameter of the statement to the field of its name, without the prefix (":name", "@name" or
+    /// "$name" all take the field name), compared exactly, as SQLite compares parameter names. A parameter without a
+    /// field, or a positional one (?), is a primary_code::range error, so none is left NULL by accident; fields without
+    /// a parameter are left out.
+    template <class Target>
+    static expected<void> bind(
+        Target& stmt,
+        const T& value
+    ) noexcept(detail::fields_bind_noexcept<typename detail::field_member_types<typename detail::field_list<T>::type>::
+                                                type>::value)
+    {
+        using list_type = typename detail::field_list<T>::type;
+        const list_type list = sqlitexx_fields(static_cast<const T*>(nullptr));
+        const int parameters = stmt.native_statement().bind_parameter_count();
+        for (int index = 1; index <= parameters; ++index)
+        {
+            const char* name = stmt.native_statement().bind_parameter_name(index);
+            if (name == nullptr || name[0] == '?')
+            {
+                return expected<void>(unexpect, detail::positional_parameter(index));
+            }
+            bool found = false;
+            expected<void> bound = bind_field<0>(
+                stmt,
+                index,
+                name + 1,
+                value,
+                list,
+                found,
+                std::integral_constant<bool, std::tuple_size<list_type>::value == 0>()
+            );
+            if (!bound)
+            {
+                return bound;
+            }
+            if (!found)
+            {
+                return expected<void>(unexpect, detail::parameter_without_field(name));
+            }
+        }
+        return {};
+    }
+
 private:
+    template <
+        std::size_t I,
+        class Target,
+        class List>
+    static expected<void> bind_field(
+        Target&,
+        int,
+        const char*,
+        const T&,
+        const List&,
+        bool&,
+        std::true_type /*past the end*/
+    ) noexcept
+    {
+        return {};
+    }
+
+    /// Binds the first field named `name` to parameter `index`, and sets `found`
+    template <
+        std::size_t I,
+        class Target,
+        class List>
+    static expected<void> bind_field(
+        Target& stmt,
+        int index,
+        const char* name,
+        const T& value,
+        const List& list,
+        bool& found,
+        std::false_type /*past the end*/
+    ) noexcept(detail::fields_bind_noexcept<typename detail::field_member_types<List>::type>::value)
+    {
+        const typename std::tuple_element<I, List>::type& field = std::get<I>(list);
+        if (std::strcmp(field.name, name) == 0)
+        {
+            found = true;
+            return stmt.bind_at(index, value.*(field.member));
+        }
+        return bind_field<I + 1>(
+            stmt,
+            index,
+            name,
+            value,
+            list,
+            found,
+            std::integral_constant<bool, I + 1 == std::tuple_size<List>::value>()
+        );
+    }
+
     template <
         std::size_t I,
         class Source,

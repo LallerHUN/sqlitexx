@@ -16,6 +16,10 @@ All notable changes to sqlitexx are listed here. The format is based on
   field list can't fill (no default constructor, computed or checked fields, class templates).
   `record_builder(row).column<T>(name or index)...build<R>()` reads the columns with the first error winning;
   `build(factory)` may return an `expected` to reject a row.
+- Records bind as parameters: `db.execute("INSERT INTO user(name, age) VALUES(:name, :age)", dee)` binds each named
+  parameter to the field of its name, in `execute`, `query`, `prepare`, `statement::bind` and `statement::execute`.
+  A parameter without a field, or a positional one, is an error. Hand-written `record_traits` add
+  `bind(statement&, const T&)`, with `record_binder(stmt).bind(name or index, value)...done()`.
 
 ## [0.5.0] - 2026-11-25
 

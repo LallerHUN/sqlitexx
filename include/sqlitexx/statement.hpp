@@ -57,15 +57,16 @@ public:
     statement& operator=(const statement&) = delete;
 
     /// \name Binding
-    /// bind() binds its arguments to parameters 1, 2, 3, ... in order. On a temporary statement it gives
-    /// the statement back, ready for the next step in a chain.
+    /// bind() binds its arguments to parameters 1, 2, 3, ... in order, or a record (sqlitexx/record_traits.hpp), on its
+    /// own, to the parameters by name. On a temporary statement it gives the statement back, ready for the next step
+    /// in a chain.
     ///@{
     template <class... Args>
     SQLITEXX_DETAIL_NODISCARD expected<void> bind(const Args&... args) & noexcept(
         detail::all_bind_noexcept<Args...>::value
     )
     {
-        return bind_from(1, args...);
+        return bind_all(args...);
     }
 
     template <class... Args>
@@ -73,7 +74,7 @@ public:
         detail::all_bind_noexcept<Args...>::value
     )
     {
-        expected<void> bound = bind_from(1, args...);
+        expected<void> bound = bind_all(args...);
         if (!bound)
         {
             return expected<statement>(unexpect, std::move(bound.error()));
@@ -121,7 +122,7 @@ public:
     )
     {
         restart();
-        expected<void> bound = bind_from(1, args...);
+        expected<void> bound = bind_all(args...);
         if (!bound)
         {
             return bound;
@@ -275,6 +276,62 @@ private:
             return bound;
         }
         return bind_from(index + 1, rest...);
+    }
+
+    /// Binding all arguments: a record on its own binds through its record_traits, anything else by position
+    template <class... Args>
+    expected<void> bind_all(const Args&... args) noexcept(detail::all_bind_noexcept<Args...>::value)
+    {
+        static_assert(
+            sizeof...(Args) == 1 || !detail::any_is_record<Args...>::value,
+            "a record binds on its own: bind(my_record), not alongside other values"
+        );
+        return bind_record_or_values(
+            std::integral_constant<bool, sizeof...(Args) == 1 && detail::any_is_record<Args...>::value>(),
+            args...
+        );
+    }
+
+    template <class... Args>
+    expected<void> bind_record_or_values(
+        std::false_type /*record*/,
+        const Args&... args
+    ) noexcept(detail::all_bind_noexcept<Args...>::value)
+    {
+        return bind_from(1, args...);
+    }
+
+    template <class Record>
+    expected<void> bind_record_or_values(
+        std::true_type /*record*/,
+        const Record& value
+    ) noexcept(detail::binds_noexcept<Record>::value)
+    {
+        static_assert(
+            detail::is_bind_record<Record>::value,
+            "this record has no record_traits<T>::bind(): it can be read, but not bound; name its fields with "
+            "SQLITEXX_FIELDS or add bind() to its record_traits"
+        );
+        return bind_record(value, detail::is_bind_record<Record>());
+    }
+
+    template <class Record>
+    expected<void> bind_record(
+        const Record& value,
+        std::true_type /*binds*/
+    ) noexcept(detail::binds_noexcept<Record>::value)
+    {
+        return record_traits<Record>::bind(*this, value);
+    }
+
+    /// Only reached after the static_assert above has failed; keeps the compiler to that one message
+    template <class Record>
+    expected<void> bind_record(
+        const Record&,
+        std::false_type /*binds*/
+    ) noexcept
+    {
+        return {};
     }
 
     /// Reading

@@ -440,6 +440,33 @@ struct sqlitexx::record_traits<point>
 - A hand-written record whose `read()` keeps views into the row says so with `static constexpr bool reads_view =
   true;`, for the same compile-time checks as a view.
 
+Records bind the other way too: pass one, on its own, wherever values are bound, and its fields go to the named
+parameters of the same name.
+
+```cpp
+user dee;
+dee.name = "Dee";
+dee.age = 41;
+sql::expected<void> added = db.execute("INSERT INTO user(name, age) VALUES(:name, :age)", dee);
+sql::expected<user> found = db.query<user>("SELECT * FROM user WHERE name = :name", dee).first();
+```
+
+- Each parameter takes the field named like it without the prefix: `:name`, `@name` and `$name` all take `name`,
+  compared exactly, as SQLite compares parameter names. A parameter used twice gets the same value.
+- A parameter without a field, or a positional `?`, is a `range` error, so no parameter is left NULL by accident.
+  Fields without a parameter are left out, like `id` above.
+- `execute`, `query`, `prepare`, `statement::bind` and `statement::execute` all take a record; it can't be mixed with
+  other values in one call.
+- A hand-written `record_traits` binds with `bind(statement&, const T&)`, and `record_binder` binds the values one
+  after the other, the first error winning. `done()` also fails when a parameter got no value:
+
+```cpp
+static sql::expected<void> bind(sql::statement& stmt, const point& p)
+{
+    return sql::record_binder(stmt).bind(":x", p.x).bind(":y", p.y).done();   // by name, or by index from 1
+}
+```
+
 ### Chaining helpers
 
 | Helper | Use with | Does |
