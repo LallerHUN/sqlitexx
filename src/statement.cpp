@@ -56,6 +56,10 @@ expected<void> statement::reset() noexcept
 
 expected<int> statement::column_index(string_view name) const noexcept
 {
+    if (!stmt)
+    {
+        return expected<int>(unexpect, empty_statement());
+    }
     const int count = stmt.column_count();
     for (int index = 0; index < count; ++index)
     {
@@ -100,6 +104,14 @@ error statement::failure(native::result code) const noexcept
 error statement::no_rows() const noexcept
 {
     return detail::error_with(native::result(SQLITE_DONE), "the query produced no rows");
+}
+
+error statement::empty_statement() const noexcept
+{
+    return detail::error_with(
+        native::result(SQLITE_MISUSE),
+        "the statement is empty: default-constructed or moved from"
+    );
 }
 
 error statement::no_parameter(const char* name) const noexcept

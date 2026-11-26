@@ -245,6 +245,18 @@ void test_moves_and_statement_outliving_connection()
     CHECK(other.finalize().ok());
     CHECK(!other);
 }
+void test_empty_statement()
+{
+    // An empty statement answers without reaching SQLite, which wouldn't check the handle
+    sqlitexx::native::statement empty;
+    CHECK(empty.status(sqlitexx::native::statement_status::vm_step) == 0);
+    CHECK(empty.status(sqlitexx::native::statement_status::memused) == 0);
+    CHECK(empty.status(sqlitexx::native::statement_status::filter_hit, true) == 0);
+    CHECK(empty.column_name(0) == nullptr);
+    CHECK(empty.column_decltype(0) == nullptr);
+    CHECK(empty.column_count() == 0);
+}
+
 } // anonymous
 
 int main()
@@ -258,6 +270,7 @@ int main()
     test_moves_and_statement_outliving_connection();
     test_backup();
     test_blob_handle();
+    test_empty_statement();
 
     return test::summary();
 }

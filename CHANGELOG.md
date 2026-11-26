@@ -6,6 +6,17 @@ All notable changes to sqlitexx are listed here. The format is based on
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-11-26
+
+### Fixed
+
+- Reading from an empty statement (default-constructed or moved from) crashed: a record through
+  `native::statement::status()`, and a NULL column through the column name in its error message. Every read is now a
+  `misuse` error, and `native::statement::status()`, `column_name()` and `column_decltype()` don't hand an empty
+  statement to SQLite, which doesn't check for one.
+- `native::statement::status()` read past the end of SQLite's counters for `filter_miss` and `filter_hit` before
+  SQLite 3.38, which added them; it gives 0 for them there, as documented.
+
 ## [0.7.0] - 2026-11-26
 
 ### Added
@@ -169,7 +180,8 @@ All notable changes to sqlitexx are listed here. The format is based on
 - CMake package for `find_package(sqlitexx)`, `FetchContent` and `add_subdirectory`. SQLite 3.54.1 is bundled, or
   the system SQLite is used with `SQLITEXX_USE_SYSTEM_SQLITE=ON`.
 
-[Unreleased]: https://github.com/LallerHUN/sqlitexx/compare/v0.7.0...develop
+[Unreleased]: https://github.com/LallerHUN/sqlitexx/compare/v0.7.1...develop
+[0.7.1]: https://github.com/LallerHUN/sqlitexx/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/LallerHUN/sqlitexx/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/LallerHUN/sqlitexx/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/LallerHUN/sqlitexx/compare/v0.4.0...v0.5.0

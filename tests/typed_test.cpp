@@ -29,6 +29,15 @@ using sqlitexx::string_view;
 using sqlitexx::native::extended_code;
 using sqlitexx::native::primary_code;
 
+// For reading a record from an empty statement
+struct named
+{
+    std::string name;
+};
+// clang-format off
+SQLITEXX_FIELDS(named, name)
+// clang-format on
+
 namespace
 {
 // An in-memory database with a user table, or an empty one when that fails (the checks then report it)
@@ -563,6 +572,32 @@ void test_prepare_with_arguments()
     CHECK(!two && two.error().primary() == primary_code::misuse);
 }
 
+void test_empty_statement()
+{
+    // Default-constructed and moved-from statements: every read is a misuse error, none reaches SQLite
+    statement empty;
+    database db = open_users();
+    expected<statement> select = db.prepare("SELECT name FROM user");
+    CHECK(select.has_value());
+    statement moved_to = std::move(*select);
+    for (statement* stmt : {&empty, &*select})
+    {
+        expected<int> one = stmt->read_row<int>();
+        CHECK(!one && one.error().primary() == primary_code::misuse);
+        expected<std::tuple<std::string, int>> two = stmt->read_row<std::string, int>();
+        CHECK(!two && two.error().primary() == primary_code::misuse);
+        expected<named> record = stmt->read_row<named>();
+        CHECK(!record && record.error().primary() == primary_code::misuse);
+        expected<int> by_index = stmt->column<int>(0);
+        CHECK(!by_index && by_index.error().primary() == primary_code::misuse);
+        expected<int> by_name = stmt->column<int>("name");
+        CHECK(!by_name && by_name.error().primary() == primary_code::misuse);
+        CHECK(stmt->native_statement().status(sqlitexx::native::statement_status::reprepare) == 0);
+    }
+    expected<named> first = moved_to.first<named>();
+    CHECK(first && first->name == "Alice");
+}
+
 } // anonymous
 
 int main()
@@ -582,6 +617,7 @@ int main()
     test_query_first();
     test_execute_with_arguments();
     test_prepare_with_arguments();
+    test_empty_statement();
 
     return test::summary();
 }
