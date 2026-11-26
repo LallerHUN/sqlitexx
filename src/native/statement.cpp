@@ -80,6 +80,53 @@ namespace native
         return sqlite3_stmt_busy(stmt) != 0;
     }
 
+    static_assert(
+        static_cast<int>(statement_status::fullscan_step) == SQLITE_STMTSTATUS_FULLSCAN_STEP,
+        ""
+    );
+    static_assert(
+        static_cast<int>(statement_status::sort) == SQLITE_STMTSTATUS_SORT,
+        ""
+    );
+    static_assert(
+        static_cast<int>(statement_status::autoindex) == SQLITE_STMTSTATUS_AUTOINDEX,
+        ""
+    );
+    static_assert(
+        static_cast<int>(statement_status::vm_step) == SQLITE_STMTSTATUS_VM_STEP,
+        ""
+    );
+    static_assert(
+        static_cast<int>(statement_status::reprepare) == SQLITE_STMTSTATUS_REPREPARE,
+        ""
+    );
+    static_assert(
+        static_cast<int>(statement_status::run) == SQLITE_STMTSTATUS_RUN,
+        ""
+    );
+#if SQLITE_VERSION_NUMBER >= 3038000 // the filter counters came with SQLite 3.38
+    static_assert(
+        static_cast<int>(statement_status::filter_miss) == SQLITE_STMTSTATUS_FILTER_MISS,
+        ""
+    );
+    static_assert(
+        static_cast<int>(statement_status::filter_hit) == SQLITE_STMTSTATUS_FILTER_HIT,
+        ""
+    );
+#endif
+    static_assert(
+        static_cast<int>(statement_status::memused) == SQLITE_STMTSTATUS_MEMUSED,
+        ""
+    );
+
+    int statement::status(
+        statement_status counter,
+        bool reset_counter
+    ) noexcept
+    {
+        return sqlite3_stmt_status(stmt, static_cast<int>(counter), reset_counter ? 1 : 0);
+    }
+
     const char* statement::sql() const noexcept
     {
         return sqlite3_sql(stmt);

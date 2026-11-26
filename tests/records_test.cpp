@@ -432,6 +432,85 @@ void test_binding_errors()
     CHECK(count && *count == 3);
 }
 
+void test_kept_columns()
+{
+    database db = open_users();
+
+    // Many rows through one lookup: the columns are kept with the statement
+    for (int i = 0; i < 200; ++i)
+    {
+        CHECK(
+            db.execute("INSERT INTO user(name, age, note) VALUES(?, ?, 'n')", "user" + std::to_string(i), i).has_value()
+        );
+    }
+    std::int64_t age_sum = 0;
+    int rows = 0;
+    for (expected<app::user>& u : db.query<app::user>("SELECT note, id, age, name FROM user WHERE age IS NOT NULL"))
+    {
+        CHECK(u.has_value());
+        if (u)
+        {
+            age_sum += *u->age;
+            ++rows;
+        }
+    }
+    CHECK(rows == 202 && age_sum == 31 + 25 + 199 * 200 / 2);
+
+    // A schema change that moves the columns: the cached statement is prepared again, and so is the lookup
+    CHECK(db.execute("CREATE TABLE person(extra TEXT, name TEXT, age INTEGER, id INTEGER)").has_value());
+    CHECK(db.execute("INSERT INTO person VALUES('x', 'Ann', 30, 1)").has_value());
+    expected<app::user> before = db.query<app::user>("SELECT * FROM person").first();
+    CHECK(before && before->name == "Ann" && before->age && *before->age == 30 && before->id == 1);
+    CHECK(db.execute("ALTER TABLE person DROP COLUMN extra").has_value());
+    CHECK(db.execute("ALTER TABLE person ADD COLUMN later TEXT").has_value());
+    expected<app::user> after = db.query<app::user>("SELECT * FROM person").first();
+    CHECK(after && after->name == "Ann" && after->age && *after->age == 30 && after->id == 1);
+
+    // Two records from one statement, one after the other
+    expected<statement> select = db.prepare("SELECT name, age FROM user WHERE id = ?", 1);
+    CHECK(select.has_value());
+    if (select)
+    {
+        expected<app::renamed> as_renamed = select->first<app::renamed>();
+        CHECK(as_renamed && as_renamed->who == "Alice" && as_renamed->years == 31);
+        CHECK(select->reset().has_value());
+        expected<app::name_view> as_view = select->first<app::name_view>();
+        CHECK(as_view && as_view->name == "Alice");
+        CHECK(select->reset().has_value());
+        expected<app::renamed> again = select->first<app::renamed>();
+        CHECK(again && again->who == "Alice");
+    }
+
+    // A missing column stays an error on every row, the kept columns or not
+    int errors = 0;
+    for (expected<counted>& c : db.query<counted>("SELECT id FROM user LIMIT 3"))
+    {
+        CHECK(!c && c.error().primary() == primary_code::range);
+        ++errors;
+    }
+    CHECK(errors == 3);
+}
+
+void test_native_status()
+{
+    database db = open_users();
+    expected<statement> select = db.prepare("SELECT * FROM user");
+    CHECK(select.has_value());
+    if (!select)
+    {
+        return;
+    }
+    sqlitexx::native::statement& stmt = select->native_statement();
+    CHECK(stmt.status(sqlitexx::native::statement_status::reprepare) == 0);
+    CHECK(select->first<app::user>().has_value());
+    CHECK(select->reset().has_value());
+    CHECK(db.execute("ALTER TABLE user ADD COLUMN later TEXT").has_value());
+    CHECK(select->first<app::user>().has_value());
+    CHECK(stmt.status(sqlitexx::native::statement_status::reprepare) == 1);
+    CHECK(stmt.status(sqlitexx::native::statement_status::run, true) >= 1);
+    CHECK(stmt.status(sqlitexx::native::statement_status::run) == 0);
+}
+
 void test_record_binder()
 {
     database db = open_users();
@@ -464,6 +543,8 @@ int main()
     test_binding_fields();
     test_binding_errors();
     test_record_binder();
+    test_kept_columns();
+    test_native_status();
 
     return test::summary();
 }

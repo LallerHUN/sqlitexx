@@ -397,6 +397,8 @@ sql::expected<user> alice = db.query<user>("SELECT * FROM user WHERE id = ?", 1)
 - Each field is filled from the column with its name, compared like SQL identifiers, so the column order doesn't
   matter and `SELECT *` works. A field without a column is a `range` error that names the column; columns without a
   field are ignored; an alias fits a column to a field: `SELECT years AS age`.
+- The columns are looked up by name on the first row and kept with the statement for the rows after it, and for
+  later runs of a cached `query`. A schema change prepares the statement again, and the columns are looked up again.
 - Fields read like columns of their own type: NULL only into an `optional` field, integers range-checked.
 - A struct works wherever a row is read: `query`, `first()`, `all()`, `next()`, `statement::rows<user>()`,
   `first<user>()` and `for_each_row<user>(...)`. It is read on its own, not alongside other types.

@@ -18,7 +18,8 @@
 /// so the order of the columns doesn't matter and SELECT * works. A field without a column is a primary_code::range
 /// error that names it; columns without a field are ignored; an alias fits a column to a field
 /// (SELECT years AS age). Each field reads through value_traits like a column of its own type: NULL only into an
-/// optional field, integers range-checked. The struct must be default-constructible.
+/// optional field, integers range-checked. The struct must be default-constructible. The columns are looked up on the
+/// first row and kept with the statement until a schema change prepares it again.
 ///
 /// SQLITEXX_FIELDS(Type, members...) goes at namespace scope, in the namespace of the struct, without a semicolon. It
 /// takes up to 32 members. It defines a function that sqlitexx finds by argument-dependent lookup, which from C++14 on
