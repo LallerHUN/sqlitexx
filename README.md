@@ -65,24 +65,31 @@ the next step only when the previous one succeeded.
 ### 3. Read
 
 ```cpp
-for (sql::expected<std::tuple<std::string, sql::optional<int>>>& user :
-     db.query<std::string, sql::optional<int>>("SELECT name, age FROM user ORDER BY id"))
+struct user
 {
-    if (!user)
+    std::string name;
+    sql::optional<int> age;
+};
+SQLITEXX_FIELDS(user, name, age)
+
+for (sql::expected<user>& u : db.query<user>("SELECT name, age FROM user ORDER BY id"))
+{
+    if (!u)
     {
-        std::printf("cannot list: %s\n", user.error().message().c_str());
+        std::printf("cannot list: %s\n", u.error().message().c_str());
         break;
     }
-    const sql::optional<int>& age = std::get<1>(*user);
-    std::printf("%s: %s\n", std::get<0>(*user).c_str(), age ? std::to_string(*age).c_str() : "unknown");
+    std::printf("%s: %s\n", u->name.c_str(), u->age ? std::to_string(*u->age).c_str() : "unknown");
 }
 
 sql::expected<std::int64_t> count = db.query<std::int64_t>("SELECT count(*) FROM user").first();
 ```
 
-`query<T...>` takes one type per column: the value for one column, a `std::tuple` for several. Each row is an
-`expected` too, so an error in the middle of the rows can't slip through. `first()` reads just the first row, and
-`all()` reads every row into a `std::vector`. See [Queries](#queries) for more.
+`SQLITEXX_FIELDS` names the members of your struct that columns go into, once, next to the struct. Each field is
+filled from the column with its name, so the order in the `SELECT` doesn't matter. For a single value, or without a
+struct, `query<T...>` takes one type per column: the value for one column, a `std::tuple` for several. Each row is
+an `expected` too, so an error in the middle of the rows can't slip through. `first()` reads just the first row, and
+`all()` reads every row into a `std::vector`. See [Queries](#queries) and [Rows as structs](#rows-as-structs).
 
 ### 4. Handle errors
 
@@ -368,6 +375,70 @@ sql::expected<sql::statement> insert = db.prepare("INSERT INTO user(name, age) V
   `prepare` take one statement, and SQL holding more is a `misuse` error, as with `prepare(sql)`.
 - `query` and `execute` prepare the SQL on every call. For SQL you run many times, prepare it once (with or without
   arguments) and call `statement::execute(args...)`, `first()` or `rows()` on it.
+
+### Rows as structs
+
+```cpp
+struct user
+{
+    std::string name;
+    sql::optional<int> age;
+    std::int64_t id = 0;
+};
+SQLITEXX_FIELDS(user, name, age, id)   // namespace scope, in the struct's namespace, no semicolon
+
+sql::expected<user> alice = db.query<user>("SELECT * FROM user WHERE id = ?", 1).first();
+```
+
+- Each field is filled from the column with its name, compared like SQL identifiers, so the column order doesn't
+  matter and `SELECT *` works. A field without a column is a `range` error that names the column; columns without a
+  field are ignored; an alias fits a column to a field: `SELECT years AS age`.
+- Fields read like columns of their own type: NULL only into an `optional` field, integers range-checked.
+- A struct works wherever a row is read: `query`, `first()`, `all()`, `next()`, `statement::rows<user>()`,
+  `first<user>()` and `for_each_row<user>(...)`. It is read on its own, not alongside other types.
+- A struct with a `string_view` member counts as a view, with the same compile-time checks.
+- The struct must be default-constructible, and must not also have `value_traits`. The macro takes up to 32 members.
+- `SQLITEXX_FIELDS` defines a function found by argument-dependent lookup. Write it by hand to read a column of
+  another name; from C++14 on that is short:
+
+```cpp
+inline auto sqlitexx_fields(const user*)
+{
+    return sql::fields(sql::field("name", &user::name), sql::field("years", &user::age));
+}
+```
+
+For what a field list can't fill, specialize `record_traits`, the row-sized counterpart of `value_traits`: a type
+without a default constructor, computed or checked fields, or a whole class template through a partial
+specialization. `record_builder` reads the columns one after the other, and the first error wins, so there is no
+check after each:
+
+```cpp
+struct point
+{
+    point(double x, double y);
+    double x, y;
+};
+
+template <>
+struct sqlitexx::record_traits<point>
+{
+    static sql::expected<point> read(const sql::statement& row)
+    {
+        return sql::record_builder(row)
+            .column<double>("x")       // by name, or by index: .column<double>(0)
+            .column<double>("y")
+            .build<point>();           // point(x, y), or point{x, y} for an aggregate
+    }
+};
+```
+
+- `build(factory)` instead calls `factory(values...)`. The factory may return an `expected`, to reject a row with an
+  error of its own.
+- A record is read wherever a row is read, on its own, and must not also have `value_traits`; the structs that
+  `SQLITEXX_FIELDS` names are records through the default `record_traits`.
+- A hand-written record whose `read()` keeps views into the row says so with `static constexpr bool reads_view =
+  true;`, for the same compile-time checks as a view.
 
 ### Chaining helpers
 

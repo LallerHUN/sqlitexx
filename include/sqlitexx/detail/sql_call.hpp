@@ -8,6 +8,7 @@
 
 #include "sqlitexx/config.hpp"
 #include "sqlitexx/detail/function_values.hpp"
+#include "sqlitexx/detail/is_expected.hpp"
 #include "sqlitexx/detail/out_of_memory.hpp"
 #include "sqlitexx/detail/utility.hpp"
 #include "sqlitexx/error.hpp"
@@ -69,16 +70,6 @@ namespace detail
     {
     };
 #endif
-
-    template <class T>
-    struct is_expected : std::false_type
-    {
-    };
-
-    template <class T>
-    struct is_expected<expected<T>> : std::true_type
-    {
-    };
 
     /// The call failed: the statement running it fails with this error's code and message
     inline void fail(

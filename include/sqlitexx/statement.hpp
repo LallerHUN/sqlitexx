@@ -214,9 +214,15 @@ public:
     /// The index of the first column with this name; a primary_code::range error when there is none.
     SQLITEXX_DETAIL_NODISCARD expected<int> column_index(string_view name) const noexcept;
 
+    /// The current row: the value for one column, a std::tuple for several, or a record (sqlitexx/record_traits.hpp),
+    /// such as a struct whose fields SQLITEXX_FIELDS names.
     template <class... T>
     SQLITEXX_DETAIL_NODISCARD expected<row<T...>> read_row() const noexcept(detail::row_reads_noexcept<T...>::value)
     {
+        static_assert(
+            sizeof...(T) == 1 || !detail::any_is_record<T...>::value,
+            "a record is read on its own: read_row<my_record>(), not alongside other types"
+        );
         return read_row_impl<T...>(std::integral_constant<bool, sizeof...(T) == 1>());
     }
 
@@ -297,7 +303,25 @@ private:
     template <class T>
     expected<T> read_row_impl(std::true_type /*single column*/) const noexcept(detail::reads_noexcept<T>::value)
     {
+        return read_single<T>(detail::is_record<T>());
+    }
+
+    template <class T>
+    expected<T> read_single(std::false_type /*record*/) const noexcept(detail::reads_noexcept<T>::value)
+    {
         return column<T>(0);
+    }
+
+    /// A record: read by its record_traits
+    template <class T>
+    expected<T> read_single(std::true_type /*record*/) const noexcept(detail::reads_noexcept<T>::value)
+    {
+        static_assert(
+            !detail::has_read_traits<T>::value,
+            "this type has both value_traits and record_traits (or fields): drop one, so it is clear whether it fills "
+            "one column or a row"
+        );
+        return record_traits<T>::read(*this);
     }
 
     template <class... T>
@@ -370,7 +394,9 @@ private:
 
 } // sqlitexx
 
-// rows() returns a rows_range, which needs the complete statement above
+// The record_traits of SQLITEXX_FIELDS structs, and rows(), which returns a rows_range that needs the complete
+// statement above
+#include "sqlitexx/detail/field_record.hpp"
 #include "sqlitexx/rows.hpp"
 
 #endif // SQLITEXX_STATEMENT_HPP

@@ -5,7 +5,9 @@
 /// Whether binding and reading types cannot throw, for the noexcept of the statement calls that bind and read them:
 /// they are noexcept exactly when the value_traits they use are.
 
+#include "sqlitexx/detail/row_fields.hpp"
 #include "sqlitexx/native/statement.hpp"
+#include "sqlitexx/record_traits.hpp"
 #include "sqlitexx/value.hpp"
 
 #include <tuple>
@@ -41,12 +43,32 @@ namespace detail
     {
     };
 
-    /// Reading a column as T, and moving the value on
-    template <class T>
+    /// Reading a column as T, and moving the value on. A record is read by its record_traits.
+    template <class T, bool Record = is_record<T>::value>
     struct reads_noexcept : std::integral_constant<
                                 bool,
                                 noexcept(value_traits<T>::read(std::declval<const native::statement&>(), 0))
                                     && std::is_nothrow_move_constructible<T>::value>
+    {
+    };
+
+    template <class T, class Members>
+    struct fields_read_noexcept;
+
+    template <class T, class... Member>
+    struct fields_read_noexcept<T, std::tuple<Member...>>
+        : std::integral_constant<
+              bool,
+              all_of<reads_noexcept<Member>...>::value && all_of<std::is_nothrow_move_assignable<Member>...>::value
+                  && std::is_nothrow_default_constructible<T>::value && std::is_nothrow_move_constructible<T>::value>
+    {
+    };
+
+    template <class T>
+    struct reads_noexcept<T, true> : std::integral_constant<
+                                         bool,
+                                         noexcept(record_traits<T>::read(std::declval<const statement&>()))
+                                             && std::is_nothrow_move_constructible<T>::value>
     {
     };
 
