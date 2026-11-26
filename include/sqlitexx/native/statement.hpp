@@ -5,6 +5,7 @@
 #include "sqlitexx/cstring_view.hpp"
 #include "sqlitexx/native/flags.hpp"
 #include "sqlitexx/native/result.hpp"
+#include "sqlitexx/native/statement_status.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -54,6 +55,11 @@ namespace native
         bool readonly() const noexcept;
         bool busy() const noexcept;
         const char* sql() const noexcept;
+        /// sqlite3_stmt_status: the value of a counter, set back to zero afterwards when `reset_counter` is true
+        int status(
+            statement_status counter,
+            bool reset_counter = false
+        ) noexcept;
         ///@}
 
         /// Binding (index counts from 1)

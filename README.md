@@ -161,7 +161,7 @@ cmake --install build --config Release --prefix <prefix>
 ```
 
 ```cmake
-find_package(sqlitexx 0.6 REQUIRED) # with <prefix> in CMAKE_PREFIX_PATH
+find_package(sqlitexx 0.7 REQUIRED) # with <prefix> in CMAKE_PREFIX_PATH
 target_link_libraries(my_app PRIVATE sqlitexx::sqlitexx)
 ```
 
@@ -373,8 +373,12 @@ sql::expected<sql::statement> insert = db.prepare("INSERT INTO user(name, age) V
 
 - `execute(sql)` without arguments runs a script of several statements. With arguments, `execute`, `query` and
   `prepare` take one statement, and SQL holding more is a `misuse` error, as with `prepare(sql)`.
-- `query` and `execute` prepare the SQL on every call. For SQL you run many times, prepare it once (with or without
-  arguments) and call `statement::execute(args...)`, `first()` or `rows()` on it.
+- `query` and `execute` with arguments keep the statements they prepare in a cache, keyed by the exact SQL text, so
+  running them in a loop prepares the SQL once. A statement goes back reset and with its bindings cleared when the
+  call or the `results` ends; when the cache is full (16 statements, `db.statement_cache_size(n)` to change it, 0
+  to turn it off), the one used longest ago is finalized. Of one SQL text it keeps at most two copies, so many
+  `results` of the same query at once don't push the other statements out. `prepare()` is never cached: the
+  statement it gives is yours.
 
 ### Rows as structs
 
@@ -393,6 +397,8 @@ sql::expected<user> alice = db.query<user>("SELECT * FROM user WHERE id = ?", 1)
 - Each field is filled from the column with its name, compared like SQL identifiers, so the column order doesn't
   matter and `SELECT *` works. A field without a column is a `range` error that names the column; columns without a
   field are ignored; an alias fits a column to a field: `SELECT years AS age`.
+- The columns are looked up by name on the first row and kept with the statement for the rows after it, and for
+  later runs of a cached `query`. A schema change prepares the statement again, and the columns are looked up again.
 - Fields read like columns of their own type: NULL only into an `optional` field, integers range-checked.
 - A struct works wherever a row is read: `query`, `first()`, `all()`, `next()`, `statement::rows<user>()`,
   `first<user>()` and `for_each_row<user>(...)`. It is read on its own, not alongside other types.

@@ -13,6 +13,7 @@ foreach(test_name
     records_test
     registrations_test
     rows_test
+    statement_cache_test
     typed_test
     transaction_test
 )
@@ -22,3 +23,6 @@ foreach(test_name
 
     add_test(NAME sqlitexx_${test_name} COMMAND sqlitexx_${test_name})
 endforeach()
+
+# Counts the connection's statements through the C API
+target_link_libraries(sqlitexx_statement_cache_test PRIVATE ${SQLITEXX_SQLITE_TARGET})

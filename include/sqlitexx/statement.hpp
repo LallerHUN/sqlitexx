@@ -14,6 +14,7 @@
 #include <tuple>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 namespace sqlitexx
 {
@@ -38,6 +39,11 @@ using row = typename detail::row_type<T...>::type;
 
 template <class... T>
 class rows_range;
+
+namespace detail
+{
+    class column_lookup;
+} // detail
 
 /// A prepared statement with typed binding and reading. Move-only. Every operation that can fail returns
 /// expected<...>, so calls chain with and_then / or_else / transform. Running out of memory is a primary_code::nomem
@@ -232,7 +238,19 @@ public:
     const native::statement& native_statement() const noexcept;
 
 private:
+    /// The columns a record's fields read (sqlitexx/fields.hpp), found once and kept while the statement keeps its
+    /// prepared form: a schema change prepares it again, and the count of those tells the kept columns are stale.
+    struct record_columns
+    {
+        const void* record;
+        int reprepares;
+        std::vector<int> indexes;
+    };
+
     native::statement stmt;
+    mutable record_columns field_columns{nullptr, 0, std::vector<int>()};
+
+    friend class detail::column_lookup;
 
     /// Errors
     error failure(native::result code) const noexcept;
