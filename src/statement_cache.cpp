@@ -43,6 +43,19 @@ namespace detail
         }
         // Nothing of the last run stays: reset() reports how it ended, which its caller already received, and the
         // values bound to it (a blob, say) are released
+        // A burst of one query would otherwise fill the cache with copies of it and push every other statement out
+        std::size_t copies = 0;
+        for (const entry& kept : entries)
+        {
+            if (kept.sql == key)
+            {
+                ++copies;
+            }
+        }
+        if (copies >= copies_per_sql)
+        {
+            return;
+        }
         native::statement& stmt = returned.native_statement();
         static_cast<void>(stmt.reset());
         static_cast<void>(stmt.clear_bindings());

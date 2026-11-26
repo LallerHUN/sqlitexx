@@ -139,7 +139,8 @@ public:
     /// How many idle statements query() and execute(sql, args...) keep for running the same SQL again: 16 when a
     /// database opens, 0 to turn the cache off. When it is full, the statement used longest ago is finalized; making
     /// it smaller finalizes the oldest ones at once. A statement a results still holds is not in the cache: running
-    /// the same SQL meanwhile prepares another one.
+    /// the same SQL meanwhile prepares another one. Of one SQL text, at most two idle copies are kept, so several
+    /// results of the same query at once don't push the other statements out.
     ///@{
     void statement_cache_size(std::size_t statements) noexcept;
     std::size_t statement_cache_size() const noexcept;

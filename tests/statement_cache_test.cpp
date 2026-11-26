@@ -91,6 +91,20 @@ void test_held_results()
     }
     CHECK(open_statements(db) == 2);
 
+    // Five at once: two copies are kept, and the other SQL stays cached
+    CHECK(count_numbers(db) == 3);
+    {
+        std::vector<sqlitexx::results<int>> many;
+        for (int i = 0; i < 5; ++i)
+        {
+            many.push_back(db.query<int>("SELECT n FROM number ORDER BY n"));
+        }
+        CHECK(open_statements(db) == 6);
+    }
+    CHECK(open_statements(db) == 3);
+    CHECK(count_numbers(db) == 3);
+    CHECK(open_statements(db) == 3);
+
     // A moved results gives its statement back once
     {
         sqlitexx::results<int> moved = db.query<int>("SELECT n FROM number ORDER BY n");
@@ -98,7 +112,7 @@ void test_held_results()
         expected<int> one = target.first();
         CHECK(one && *one == 1);
     }
-    CHECK(open_statements(db) == 2);
+    CHECK(open_statements(db) == 3);
 }
 
 void test_size()

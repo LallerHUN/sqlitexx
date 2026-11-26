@@ -16,7 +16,8 @@ namespace sqlitexx
 namespace detail
 {
     /// Idle prepared statements, the least recently used first. A statement is taken out while it is in use and given
-    /// back afterwards, reset and with its bindings cleared; when the cache is full, the oldest one is finalized.
+    /// back afterwards, reset and with its bindings cleared; when the cache is full, the oldest one is finalized. At
+    /// most two idle copies of one SQL text are kept; a third that comes back is finalized.
     class statement_cache final
     {
     public:
@@ -47,6 +48,9 @@ namespace detail
         ///@}
 
     private:
+        /// The most idle copies of one SQL text kept: more come from several results of it at once
+        static constexpr std::size_t copies_per_sql = 2;
+
         struct entry
         {
             std::string sql;

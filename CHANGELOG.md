@@ -10,7 +10,7 @@ All notable changes to sqlitexx are listed here. The format is based on
 
 - `query` and `execute(sql, args...)` keep the statements they prepare in a cache, keyed by the exact SQL text, so
   running the same SQL again doesn't prepare it again. Statements go back reset and with their bindings cleared; the
-  least recently used is finalized when the cache is full. `database::statement_cache_size(n)` sets the size (16 by
+  least recently used is finalized when the cache is full, and at most two copies of one SQL text are kept. `database::statement_cache_size(n)` sets the size (16 by
   default, 0 turns it off). `prepare()` is never cached.
 
 ## [0.6.0] - 2026-11-26
