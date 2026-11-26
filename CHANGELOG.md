@@ -6,6 +6,8 @@ All notable changes to sqlitexx are listed here. The format is based on
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-26
+
 ### Added
 
 - Rows as structs: `SQLITEXX_FIELDS(user, name, age)` names the members that columns go into, and `user` can then be
@@ -151,7 +153,8 @@ All notable changes to sqlitexx are listed here. The format is based on
 - CMake package for `find_package(sqlitexx)`, `FetchContent` and `add_subdirectory`. SQLite 3.54.1 is bundled, or
   the system SQLite is used with `SQLITEXX_USE_SYSTEM_SQLITE=ON`.
 
-[Unreleased]: https://github.com/LallerHUN/sqlitexx/compare/v0.5.0...develop
+[Unreleased]: https://github.com/LallerHUN/sqlitexx/compare/v0.6.0...develop
+[0.6.0]: https://github.com/LallerHUN/sqlitexx/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/LallerHUN/sqlitexx/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/LallerHUN/sqlitexx/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/LallerHUN/sqlitexx/compare/v0.2.0...v0.3.0
