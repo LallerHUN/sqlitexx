@@ -4,6 +4,7 @@
 #include "sqlnx/sqlite/config.hpp"
 #include "sqlnx/sqlite/detail/noexcept_traits.hpp"
 #include "sqlnx/sqlite/detail/out_of_memory.hpp"
+#include "sqlnx/sqlite/detail/parameter_errors.hpp"
 #include "sqlnx/sqlite/detail/utility.hpp"
 #include "sqlnx/sqlite/error.hpp"
 #include "sqlnx/sqlite/expected.hpp"
@@ -67,8 +68,10 @@ namespace sqlite
 
         /// \name Binding
         /// bind() binds its arguments to parameters 1, 2, 3, ... in order, or a record
-        /// (sqlnx/sqlite/record_traits.hpp), on its own, to the parameters by name. On a temporary statement it gives
-        /// the statement back, ready for the next step in a chain.
+        /// (sqlnx/sqlite/record_traits.hpp), on its own, to the parameters by name. Values in order need one per
+        /// parameter, neither fewer nor more, or it is a primary_code::range error; bind_at() and bind_named() bind
+        /// one parameter each. On a temporary statement it gives the statement back, ready for the next step in a
+        /// chain.
         ///@{
         template <class... Args>
         SQLNX_DETAIL_NODISCARD expected<void> bind(const Args&... args) & noexcept(
@@ -329,6 +332,11 @@ namespace sqlite
             const Args&... args
         ) noexcept(detail::all_bind_noexcept<Args...>::value)
         {
+            const int parameters = stmt.bind_parameter_count();
+            if (parameters != static_cast<int>(sizeof...(Args)))
+            {
+                return expected<void>(unexpect, detail::argument_count(static_cast<int>(sizeof...(Args)), parameters));
+            }
             return bind_from(1, args...);
         }
 
