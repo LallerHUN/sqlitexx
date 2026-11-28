@@ -2,7 +2,7 @@
 // part runs only when the standard has the type, so this program builds in every standard.
 
 #include "check.hpp"
-#include "sqlitexx/sqlitexx.hpp"
+#include "sqlnx/sqlite.hpp"
 
 #include <cstdio>
 #include <cstring>
@@ -10,9 +10,9 @@
 #include <tuple>
 #include <utility>
 
-using sqlitexx::database;
-using sqlitexx::expected;
-using sqlitexx::statement;
+using sqlnx::sqlite::database;
+using sqlnx::sqlite::expected;
+using sqlnx::sqlite::statement;
 
 namespace
 {
@@ -100,7 +100,7 @@ void test_spans()
     CHECK(select.reset().has_value());
     CHECK(select.bind(nullptr).has_value());
     expected<std::span<const std::byte>> strict = select.first<std::span<const std::byte>>();
-    CHECK(!strict && strict.error().primary() == sqlitexx::native::primary_code::mismatch);
+    CHECK(!strict && strict.error().primary() == sqlnx::sqlite::native::primary_code::mismatch);
 }
 #endif
 
@@ -128,8 +128,8 @@ void test_char8_text()
     CHECK(view && *view == u8"view");
 
     CHECK(select.reset().has_value());
-    CHECK(select.bind(sqlitexx::u8cstring_view(u8"terminated")).has_value());
-    expected<sqlitexx::u8cstring_view> terminated = select.first<sqlitexx::u8cstring_view>();
+    CHECK(select.bind(sqlnx::sqlite::u8cstring_view(u8"terminated")).has_value());
+    expected<sqlnx::sqlite::u8cstring_view> terminated = select.first<sqlnx::sqlite::u8cstring_view>();
     CHECK(terminated && terminated->size() == 10);
     CHECK(terminated && terminated->c_str()[10] == u8'\0');
     CHECK(terminated && *terminated == std::u8string_view(u8"terminated"));
@@ -144,7 +144,7 @@ void test_char8_text()
     CHECK(select.reset().has_value());
     const char8_t* none = nullptr;
     CHECK(select.bind(none).has_value());
-    expected<sqlitexx::optional<std::u8string>> null = select.first<sqlitexx::optional<std::u8string>>();
+    expected<sqlnx::sqlite::optional<std::u8string>> null = select.first<sqlnx::sqlite::optional<std::u8string>>();
     CHECK(null && !null->has_value());
 }
 #endif

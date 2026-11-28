@@ -7,13 +7,13 @@
 #   tools/check.sh --list       the job names
 #
 # Needs gcc, clang, cmake, ninja, libsqlite3-dev and clang-format 22.1.3 (pipx install clang-format==22.1.3).
-# SQLITEXX_CHECK_DIR sets where the build directories go (default: ~/.cache/sqlitexx-check). In WSL keep it in the
+# SQLNX_CHECK_DIR sets where the build directories go (default: ~/.cache/sqlnx-check). In WSL keep it in the
 # Linux file system: building under /mnt/c is several times slower.
 
 set -u
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-work="${SQLITEXX_CHECK_DIR:-$HOME/.cache/sqlitexx-check}"
+work="${SQLNX_CHECK_DIR:-$HOME/.cache/sqlnx-check}"
 clang_format="${CLANG_FORMAT:-$(command -v clang-format || true)}"
 if [ -x "$HOME/.local/bin/clang-format" ] && [ -z "${CLANG_FORMAT:-}" ]
 then
@@ -43,7 +43,7 @@ build()
         "-DCMAKE_BUILD_TYPE=$type" \
         "-DCMAKE_CXX_STANDARD=$std" \
         -DCMAKE_CXX_STANDARD_REQUIRED=ON \
-        -DSQLITEXX_WARNINGS_AS_ERRORS=ON \
+        -DSQLNX_WARNINGS_AS_ERRORS=ON \
         "$@" &&
         cmake --build "$dir" --parallel &&
         ctest --test-dir "$dir" --output-on-failure
@@ -56,7 +56,7 @@ install()
     shift
     rm -rf "$dir/prefix" &&
         cmake -S "$root" -B "$dir/build" -G Ninja -DCMAKE_BUILD_TYPE=Release \
-            -DSQLITEXX_BUILD_TESTS=OFF -DSQLITEXX_BUILD_EXAMPLES=OFF "$@" &&
+            -DSQLNX_BUILD_TESTS=OFF -DSQLNX_BUILD_EXAMPLES=OFF "$@" &&
         cmake --build "$dir/build" --parallel &&
         cmake --install "$dir/build" --prefix "$dir/prefix" &&
         cmake -S "$root/tests/install" -B "$dir/consumer" -G Ninja -DCMAKE_BUILD_TYPE=Release \
@@ -102,10 +102,10 @@ run()
     gcc-noexc11) build "$1" Release 11 "${gcc_args[@]}" -DCMAKE_CXX_FLAGS=-fno-exceptions ;;
     gcc-noexc17) build "$1" Release 17 "${gcc_args[@]}" -DCMAKE_CXX_FLAGS=-fno-exceptions ;;
     gcc-noexc23) build "$1" Release 23 "${gcc_args[@]}" -DCMAKE_CXX_FLAGS=-fno-exceptions ;;
-    gcc-system-sqlite) build "$1" Release 17 "${gcc_args[@]}" -DSQLITEXX_USE_SYSTEM_SQLITE=ON ;;
+    gcc-system-sqlite) build "$1" Release 17 "${gcc_args[@]}" -DSQLNX_USE_SYSTEM_SQLITE=ON ;;
     install-gcc) install "$1" "${gcc_args[@]}" ;;
     install-gcc11) install "$1" "${gcc_args[@]}" -DCMAKE_CXX_STANDARD=11 ;;
-    install-system-sqlite) install "$1" "${gcc_args[@]}" -DCMAKE_CXX_STANDARD=23 -DSQLITEXX_USE_SYSTEM_SQLITE=ON ;;
+    install-system-sqlite) install "$1" "${gcc_args[@]}" -DCMAKE_CXX_STANDARD=23 -DSQLNX_USE_SYSTEM_SQLITE=ON ;;
     format) format ;;
     *)
         echo "unknown job: $1 (tools/check.sh --list shows the names)"

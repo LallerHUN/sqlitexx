@@ -17,12 +17,12 @@ foreach(test_name
     typed_test
     transaction_test
 )
-    add_executable(sqlitexx_${test_name} ${test_name}.cpp check.hpp)
-    target_link_libraries(sqlitexx_${test_name} PRIVATE sqlitexx::sqlitexx)
-    target_compile_options(sqlitexx_${test_name} PRIVATE ${SQLITEXX_COMPILE_OPTIONS})
+    add_executable(sqlnx_${test_name} ${test_name}.cpp check.hpp)
+    target_link_libraries(sqlnx_${test_name} PRIVATE sqlnx::sqlite)
+    target_compile_options(sqlnx_${test_name} PRIVATE ${SQLNX_COMPILE_OPTIONS})
 
-    add_test(NAME sqlitexx_${test_name} COMMAND sqlitexx_${test_name})
+    add_test(NAME sqlnx_${test_name} COMMAND sqlnx_${test_name})
 endforeach()
 
 # Counts the connection's statements through the C API
-target_link_libraries(sqlitexx_statement_cache_test PRIVATE ${SQLITEXX_SQLITE_TARGET})
+target_link_libraries(sqlnx_statement_cache_test PRIVATE ${SQLNX_SQLITE_TARGET})

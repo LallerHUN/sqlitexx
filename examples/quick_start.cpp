@@ -1,22 +1,22 @@
 // The program that README.md's "First steps" walks through. CI builds and runs it, so the README cannot drift from the
 // API unnoticed: keep the two in step.
 
-#include <sqlitexx/sqlitexx.hpp>
+#include <sqlnx/sqlite.hpp>
 
 #include <cstdint>
 #include <cstdio>
 #include <string>
 
-namespace sql = sqlitexx;
+namespace sql = sqlnx::sqlite;
 
-// The rows of the user table; SQLITEXX_FIELDS names the members that columns go into
+// The rows of the user table; SQLNX_FIELDS names the members that columns go into
 struct user
 {
     std::string name;
     sql::optional<int> age;
 };
 // clang-format off
-SQLITEXX_FIELDS(user, name, age)
+SQLNX_FIELDS(user, name, age)
 // clang-format on
 
 int main()

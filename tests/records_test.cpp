@@ -1,8 +1,8 @@
-// Tests for records: SQLITEXX_FIELDS, hand-written field lists, record_traits with record_builder and record_binder,
+// Tests for records: SQLNX_FIELDS, hand-written field lists, record_traits with record_builder and record_binder,
 // reading them everywhere a row is read and binding them as parameters.
 
 #include "check.hpp"
-#include "sqlitexx/sqlitexx.hpp"
+#include "sqlnx/sqlite.hpp"
 
 #include <cstdint>
 #include <string>
@@ -10,11 +10,11 @@
 #include <utility>
 #include <vector>
 
-using sqlitexx::database;
-using sqlitexx::expected;
-using sqlitexx::optional;
-using sqlitexx::statement;
-using sqlitexx::native::primary_code;
+using sqlnx::sqlite::database;
+using sqlnx::sqlite::expected;
+using sqlnx::sqlite::optional;
+using sqlnx::sqlite::statement;
+using sqlnx::sqlite::native::primary_code;
 
 namespace app
 {
@@ -25,7 +25,7 @@ struct user
     std::int64_t id = 0;
 };
 // clang-format off
-SQLITEXX_FIELDS(user, name, age, id)
+SQLNX_FIELDS(user, name, age, id)
 // clang-format on
 
 // A field whose column has another name, written by hand: the macro's C++11 form
@@ -35,27 +35,27 @@ struct renamed
     int years = 0;
 };
 
-inline auto sqlitexx_fields(const renamed*) -> decltype(sqlitexx::fields(
-    sqlitexx::field(
+inline auto sqlnx_fields(const renamed*) -> decltype(sqlnx::fields(
+    sqlnx::field(
         "name",
         &renamed::who
     ),
-    sqlitexx::field(
+    sqlnx::field(
         "age",
         &renamed::years
     )
 ))
 {
-    return sqlitexx::fields(sqlitexx::field("name", &renamed::who), sqlitexx::field("age", &renamed::years));
+    return sqlnx::fields(sqlnx::field("name", &renamed::who), sqlnx::field("age", &renamed::years));
 }
 
 // A view member makes the struct a view
 struct name_view
 {
-    sqlitexx::string_view name;
+    sqlnx::sqlite::string_view name;
 };
 // clang-format off
-SQLITEXX_FIELDS(name_view, name)
+SQLNX_FIELDS(name_view, name)
 // clang-format on
 } // app
 
@@ -65,10 +65,10 @@ struct counted
     std::int64_t n = 0;
 };
 // clang-format off
-SQLITEXX_FIELDS(counted, n)
+SQLNX_FIELDS(counted, n)
 // clang-format on
 
-// No default constructor: SQLITEXX_FIELDS can't fill it, record_traits with the builder can
+// No default constructor: SQLNX_FIELDS can't fill it, record_traits with the builder can
 struct point
 {
     point(
@@ -85,11 +85,11 @@ struct point
 };
 
 template <>
-struct sqlitexx::record_traits<point>
+struct sqlnx::sqlite::record_traits<point>
 {
     static expected<point> read(const statement& row)
     {
-        return sqlitexx::record_builder(row).column<double>("x").column<double>("y").build<point>();
+        return sqlnx::sqlite::record_builder(row).column<double>("x").column<double>("y").build<point>();
     }
 
     static expected<void> bind(
@@ -97,7 +97,7 @@ struct sqlitexx::record_traits<point>
         const point& p
     )
     {
-        return sqlitexx::record_binder(stmt).bind(":x", p.x).bind(2, p.y).done();
+        return sqlnx::sqlite::record_binder(stmt).bind(":x", p.x).bind(2, p.y).done();
     }
 };
 
@@ -109,19 +109,19 @@ struct span_row
 };
 
 template <>
-struct sqlitexx::record_traits<span_row>
+struct sqlnx::sqlite::record_traits<span_row>
 {
     static expected<span_row> read(const statement& row)
     {
-        return sqlitexx::record_builder(row).column<int>(0).column<int>(1).build(
+        return sqlnx::sqlite::record_builder(row).column<int>(0).column<int>(1).build(
             [](int from, int to) -> expected<span_row>
             {
                 if (from > to)
                 {
                     return expected<span_row>(
-                        sqlitexx::unexpect,
-                        sqlitexx::error(
-                            sqlitexx::native::result(static_cast<int>(primary_code::constraint)),
+                        sqlnx::sqlite::unexpect,
+                        sqlnx::sqlite::error(
+                            sqlnx::sqlite::native::result(static_cast<int>(primary_code::constraint)),
                             "span ends before it starts"
                         )
                     );
@@ -141,14 +141,14 @@ struct labeled
 };
 
 template <class First, class Second>
-struct sqlitexx::record_traits<labeled<First, Second>>
+struct sqlnx::sqlite::record_traits<labeled<First, Second>>
 {
     static expected<labeled<
         First,
         Second>>
     read(const statement& row)
     {
-        return sqlitexx::record_builder(row)
+        return sqlnx::sqlite::record_builder(row)
             .template column<First>("label")
             .template column<Second>("value")
             .template build<labeled<First, Second>>();
@@ -158,55 +158,55 @@ struct sqlitexx::record_traits<labeled<First, Second>>
 // A hand-written record that keeps a view says so
 struct label_view
 {
-    sqlitexx::string_view label;
+    sqlnx::sqlite::string_view label;
 };
 
 template <>
-struct sqlitexx::record_traits<label_view>
+struct sqlnx::sqlite::record_traits<label_view>
 {
     static constexpr bool reads_view = true;
 
     static expected<label_view> read(const statement& row)
     {
-        return sqlitexx::record_builder(row).column<sqlitexx::string_view>("label").build<label_view>();
+        return sqlnx::sqlite::record_builder(row).column<sqlnx::sqlite::string_view>("label").build<label_view>();
     }
 };
 
 static_assert(
-    sqlitexx::detail::is_record<point>::value,
+    sqlnx::sqlite::detail::is_record<point>::value,
     "point has record_traits"
 );
 static_assert(
-    sqlitexx::detail::is_record<app::user>::value,
-    "SQLITEXX_FIELDS makes a record"
+    sqlnx::sqlite::detail::is_record<app::user>::value,
+    "SQLNX_FIELDS makes a record"
 );
 static_assert(
-    !sqlitexx::detail::is_record<int>::value,
+    !sqlnx::sqlite::detail::is_record<int>::value,
     "int is a value"
 );
 static_assert(
-    sqlitexx::detail::reads_view<label_view>::value,
+    sqlnx::sqlite::detail::reads_view<label_view>::value,
     "label_view says it keeps a view"
 );
 static_assert(
-    !sqlitexx::detail::reads_view<point>::value,
+    !sqlnx::sqlite::detail::reads_view<point>::value,
     "point owns its values"
 );
 
 static_assert(
-    sqlitexx::detail::has_fields<app::user>::value,
+    sqlnx::sqlite::detail::has_fields<app::user>::value,
     "user has fields"
 );
 static_assert(
-    !sqlitexx::detail::has_fields<int>::value,
+    !sqlnx::sqlite::detail::has_fields<int>::value,
     "int has none"
 );
 static_assert(
-    sqlitexx::detail::reads_view<app::name_view>::value,
+    sqlnx::sqlite::detail::reads_view<app::name_view>::value,
     "a struct with a view member is a view"
 );
 static_assert(
-    !sqlitexx::detail::reads_view<app::user>::value,
+    !sqlnx::sqlite::detail::reads_view<app::user>::value,
     "user owns its values"
 );
 
@@ -300,13 +300,13 @@ void test_everywhere_a_row_is_read()
     CHECK(seen == 2);
 
     expected<app::user> chained =
-        db.prepare("SELECT * FROM user WHERE id = ?", 3).and_then(sqlitexx::first<app::user>());
+        db.prepare("SELECT * FROM user WHERE id = ?", 3).and_then(sqlnx::sqlite::first<app::user>());
     CHECK(chained && chained->name == "Carol");
 
     std::vector<std::string> names;
     CHECK(db.prepare("SELECT * FROM user ORDER BY id")
               .and_then(
-                  sqlitexx::for_each_row<app::user>(
+                  sqlnx::sqlite::for_each_row<app::user>(
                       [&names](const app::user& u)
                       {
                           names.push_back(u.name);
@@ -317,12 +317,12 @@ void test_everywhere_a_row_is_read()
     CHECK(names.size() == 3);
 
     // Pages
-    sqlitexx::results<app::user> users = db.query<app::user>("SELECT * FROM user ORDER BY id");
+    sqlnx::sqlite::results<app::user> users = db.query<app::user>("SELECT * FROM user ORDER BY id");
     expected<std::vector<app::user>> page = users.next(2);
     CHECK(page && page->size() == 2);
 
     // A struct with a view member reads views on a named results, valid until its next run
-    sqlitexx::results<app::name_view> views = db.query<app::name_view>("SELECT name FROM user ORDER BY id");
+    sqlnx::sqlite::results<app::name_view> views = db.query<app::name_view>("SELECT name FROM user ORDER BY id");
     expected<app::name_view> view = views.first();
     CHECK(view && view->name == "Alice");
 }
@@ -371,7 +371,7 @@ void test_record_traits()
     CHECK(label && label->label == "b" && label->value == 2);
 
     // A hand-written view record on a named results
-    sqlitexx::results<label_view> views = db.query<label_view>("SELECT label FROM shape ORDER BY rowid");
+    sqlnx::sqlite::results<label_view> views = db.query<label_view>("SELECT label FROM shape ORDER BY rowid");
     expected<label_view> view = views.first();
     CHECK(view && view->label == "a");
 }
@@ -500,15 +500,15 @@ void test_native_status()
     {
         return;
     }
-    sqlitexx::native::statement& stmt = select->native_statement();
-    CHECK(stmt.status(sqlitexx::native::statement_status::reprepare) == 0);
+    sqlnx::sqlite::native::statement& stmt = select->native_statement();
+    CHECK(stmt.status(sqlnx::sqlite::native::statement_status::reprepare) == 0);
     CHECK(select->first<app::user>().has_value());
     CHECK(select->reset().has_value());
     CHECK(db.execute("ALTER TABLE user ADD COLUMN later TEXT").has_value());
     CHECK(select->first<app::user>().has_value());
-    CHECK(stmt.status(sqlitexx::native::statement_status::reprepare) == 1);
-    CHECK(stmt.status(sqlitexx::native::statement_status::run, true) >= 1);
-    CHECK(stmt.status(sqlitexx::native::statement_status::run) == 0);
+    CHECK(stmt.status(sqlnx::sqlite::native::statement_status::reprepare) == 1);
+    CHECK(stmt.status(sqlnx::sqlite::native::statement_status::run, true) >= 1);
+    CHECK(stmt.status(sqlnx::sqlite::native::statement_status::run) == 0);
 }
 
 void test_record_binder()

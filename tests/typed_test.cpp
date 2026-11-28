@@ -1,13 +1,13 @@
 // Tests for the typed layer: database, statement, value traits and the chaining helpers.
 
-// sqlitexx must compile after <windows.h> without NOMINMAX, whose min and max macros break unguarded calls such as
+// sqlnx must compile after <windows.h> without NOMINMAX, whose min and max macros break unguarded calls such as
 // std::numeric_limits<T>::max(). User code includes it first often enough.
 #if defined(_WIN32)
 #include <windows.h>
 #endif
 
 #include "check.hpp"
-#include "sqlitexx/sqlitexx.hpp"
+#include "sqlnx/sqlite.hpp"
 
 #include <cstdint>
 #include <cstring>
@@ -18,16 +18,16 @@
 #include <tuple>
 #include <utility>
 
-using sqlitexx::blob;
-using sqlitexx::cstring_view;
-using sqlitexx::database;
-using sqlitexx::error;
-using sqlitexx::expected;
-using sqlitexx::optional;
-using sqlitexx::statement;
-using sqlitexx::string_view;
-using sqlitexx::native::extended_code;
-using sqlitexx::native::primary_code;
+using sqlnx::sqlite::blob;
+using sqlnx::sqlite::cstring_view;
+using sqlnx::sqlite::database;
+using sqlnx::sqlite::error;
+using sqlnx::sqlite::expected;
+using sqlnx::sqlite::optional;
+using sqlnx::sqlite::statement;
+using sqlnx::sqlite::string_view;
+using sqlnx::sqlite::native::extended_code;
+using sqlnx::sqlite::native::primary_code;
 
 // For reading a record from an empty statement
 struct named
@@ -35,7 +35,7 @@ struct named
     std::string name;
 };
 // clang-format off
-SQLITEXX_FIELDS(named, name)
+SQLNX_FIELDS(named, name)
 // clang-format on
 
 namespace
@@ -60,7 +60,7 @@ database open_users()
 void test_open_failure_has_message()
 {
     expected<database> db =
-        database::open("this/directory/does/not/exist/db.sqlite", sqlitexx::native::open_flags::readonly);
+        database::open("this/directory/does/not/exist/db.sqlite", sqlnx::sqlite::native::open_flags::readonly);
     CHECK(!db.has_value());
     if (!db)
     {
@@ -242,16 +242,16 @@ void test_chaining()
 
     // Found
     expected<int> alice = db.prepare("SELECT age FROM user WHERE name = ?")
-                              .and_then(sqlitexx::bind_values("Alice"))
-                              .and_then(sqlitexx::first<int>());
+                              .and_then(sqlnx::sqlite::bind_values("Alice"))
+                              .and_then(sqlnx::sqlite::first<int>());
     CHECK(alice && *alice == 31);
 
     // Not found: on() turns that one error into a value
     expected<int> nobody = db.prepare("SELECT age FROM user WHERE name = ?")
-                               .and_then(sqlitexx::bind_values(std::string("Nobody")))
-                               .and_then(sqlitexx::first<int>())
+                               .and_then(sqlnx::sqlite::bind_values(std::string("Nobody")))
+                               .and_then(sqlnx::sqlite::first<int>())
                                .or_else(
-                                   sqlitexx::on(
+                                   sqlnx::sqlite::on(
                                        primary_code::done,
                                        [](const error&)
                                        {
@@ -263,9 +263,9 @@ void test_chaining()
 
     // Other errors pass through on() unchanged
     expected<int> broken = db.prepare("SELEKT age FROM user")
-                               .and_then(sqlitexx::first<int>())
+                               .and_then(sqlnx::sqlite::first<int>())
                                .or_else(
-                                   sqlitexx::on(
+                                   sqlnx::sqlite::on(
                                        primary_code::done,
                                        [](const error&)
                                        {
@@ -277,7 +277,7 @@ void test_chaining()
 
     // Extended codes, transform and transform_error
     expected<std::string> duplicate = db.prepare("INSERT INTO user(name) VALUES(?)")
-                                          .and_then(sqlitexx::execute_with("Bob"))
+                                          .and_then(sqlnx::sqlite::execute_with("Bob"))
                                           .transform(
                                               []
                                               {
@@ -285,7 +285,7 @@ void test_chaining()
                                               }
                                           )
                                           .or_else(
-                                              sqlitexx::on(
+                                              sqlnx::sqlite::on(
                                                   extended_code::constraint_unique,
                                                   [](const error&)
                                                   {
@@ -296,7 +296,7 @@ void test_chaining()
     CHECK(duplicate && *duplicate == "already there");
 
     expected<int> message_length = db.prepare("SELEKT")
-                                       .and_then(sqlitexx::first<int>())
+                                       .and_then(sqlnx::sqlite::first<int>())
                                        .transform_error(
                                            [](const error& e)
                                            {
@@ -308,7 +308,7 @@ void test_chaining()
     int rows = 0;
     expected<void> counted = db.prepare("SELECT id FROM user")
                                  .and_then(
-                                     sqlitexx::for_each_row<std::int64_t>(
+                                     sqlnx::sqlite::for_each_row<std::int64_t>(
                                          [&](std::int64_t)
                                          {
                                              ++rows;
@@ -332,7 +332,7 @@ void test_extended_codes()
 
     // on() with an extended code handles that code only: other constraint errors pass through
     expected<std::string> passed = db.prepare("INSERT INTO user(name) VALUES(NULL)")
-                                       .and_then(sqlitexx::execute_with())
+                                       .and_then(sqlnx::sqlite::execute_with())
                                        .transform(
                                            []
                                            {
@@ -340,7 +340,7 @@ void test_extended_codes()
                                            }
                                        )
                                        .or_else(
-                                           sqlitexx::on(
+                                           sqlnx::sqlite::on(
                                                extended_code::constraint_unique,
                                                [](const error&)
                                                {
@@ -352,7 +352,7 @@ void test_extended_codes()
 
     // A code given as a number still works, for codes the enum doesn't list
     expected<std::string> numbered = db.prepare("INSERT INTO user(name) VALUES(NULL)")
-                                         .and_then(sqlitexx::execute_with())
+                                         .and_then(sqlnx::sqlite::execute_with())
                                          .transform(
                                              []
                                              {
@@ -360,7 +360,7 @@ void test_extended_codes()
                                              }
                                          )
                                          .or_else(
-                                             sqlitexx::on(
+                                             sqlnx::sqlite::on(
                                                  static_cast<int>(extended_code::constraint_notnull),
                                                  [](const error&)
                                                  {
@@ -438,47 +438,48 @@ void test_move_only_steps()
     database db = open_users();
     int seen = 0;
     CHECK(db.prepare("SELECT name FROM user")
-              .and_then(sqlitexx::for_each_row<std::string>(counting{std::unique_ptr<int>(new int(0)), &seen}))
+              .and_then(sqlnx::sqlite::for_each_row<std::string>(counting{std::unique_ptr<int>(new int(0)), &seen}))
               .has_value());
     CHECK(seen > 0);
 
-    expected<int> none = db.prepare("SELECT 1 WHERE 0")
-                             .and_then(sqlitexx::first<int>())
-                             .or_else(sqlitexx::on(primary_code::done, fallback{std::unique_ptr<int>(new int(7))}));
+    expected<int> none =
+        db.prepare("SELECT 1 WHERE 0")
+            .and_then(sqlnx::sqlite::first<int>())
+            .or_else(sqlnx::sqlite::on(primary_code::done, fallback{std::unique_ptr<int>(new int(7))}));
     CHECK(none && *none == 7);
 }
 
 // Types that read as a view into the statement: results::first() on a temporary and the first<T>() step on a
 // temporary statement reject them
 static_assert(
-    sqlitexx::detail::reads_view<string_view>::value,
+    sqlnx::sqlite::detail::reads_view<string_view>::value,
     "string_view is a view"
 );
 static_assert(
-    sqlitexx::detail::reads_view<cstring_view>::value,
+    sqlnx::sqlite::detail::reads_view<cstring_view>::value,
     "cstring_view is a view"
 );
 static_assert(
-    sqlitexx::detail::reads_view<optional<string_view>>::value,
+    sqlnx::sqlite::detail::reads_view<optional<string_view>>::value,
     "an optional view is a view"
 );
 static_assert(
-    !sqlitexx::detail::reads_view<std::string>::value,
+    !sqlnx::sqlite::detail::reads_view<std::string>::value,
     "std::string owns its text"
 );
 static_assert(
-    !sqlitexx::detail::reads_view<optional<int>>::value,
+    !sqlnx::sqlite::detail::reads_view<optional<int>>::value,
     "int is a value"
 );
 static_assert(
-    !sqlitexx::detail::any_reads_view<
+    !sqlnx::sqlite::detail::any_reads_view<
         int,
         std::string,
         blob>::value,
     "no views among these"
 );
 static_assert(
-    sqlitexx::detail::any_reads_view<
+    sqlnx::sqlite::detail::any_reads_view<
         int,
         string_view>::value,
     "one view among these"
@@ -506,7 +507,7 @@ void test_query_first()
     expected<int> fallback_age =
         db.query<int>("SELECT age FROM user WHERE name = ?", "Carol")
             .first()
-            .or_else(sqlitexx::on(primary_code::done, fallback{std::unique_ptr<int>(new int(-1))}));
+            .or_else(sqlnx::sqlite::on(primary_code::done, fallback{std::unique_ptr<int>(new int(-1))}));
     CHECK(fallback_age && *fallback_age == -1);
 
     // NULL into a non-optional, SQL that doesn't prepare, too many arguments, two statements
@@ -520,7 +521,7 @@ void test_query_first()
     CHECK(!two && two.error().primary() == primary_code::misuse);
 
     // On a named results, first() runs the query again each time, and a view stays valid until the next run
-    sqlitexx::results<string_view> names = db.query<string_view>("SELECT name FROM user ORDER BY id");
+    sqlnx::sqlite::results<string_view> names = db.query<string_view>("SELECT name FROM user ORDER BY id");
     expected<string_view> name = names.first();
     CHECK(name && *name == "Alice");
     CHECK(db.execute("UPDATE user SET name = ? WHERE id = ?", "Ann", 1).has_value());
@@ -562,7 +563,8 @@ void test_prepare_with_arguments()
     CHECK(!none && none.error().primary() == primary_code::done);
 
     // In a chain
-    expected<int> age = db.prepare("SELECT age FROM user WHERE name = ?", "Alice").and_then(sqlitexx::first<int>());
+    expected<int> age =
+        db.prepare("SELECT age FROM user WHERE name = ?", "Alice").and_then(sqlnx::sqlite::first<int>());
     CHECK(age && *age == 31);
 
     // A failed bind is the result's error
@@ -592,7 +594,7 @@ void test_empty_statement()
         CHECK(!by_index && by_index.error().primary() == primary_code::misuse);
         expected<int> by_name = stmt->column<int>("name");
         CHECK(!by_name && by_name.error().primary() == primary_code::misuse);
-        CHECK(stmt->native_statement().status(sqlitexx::native::statement_status::reprepare) == 0);
+        CHECK(stmt->native_statement().status(sqlnx::sqlite::native::statement_status::reprepare) == 0);
     }
     expected<named> first = moved_to.first<named>();
     CHECK(first && first->name == "Alice");

@@ -1,323 +1,331 @@
-#include "impl_sqlitexx.hpp"
+#include "impl_sqlnx.hpp"
 
-namespace sqlitexx
+namespace sqlnx
 {
-namespace native
+namespace sqlite
 {
-    statement::statement(sqlite3_stmt* handle) noexcept
-        : stmt(handle)
+    namespace native
     {
-    }
+        statement::statement(sqlite3_stmt* handle) noexcept
+            : stmt(handle)
+        {
+        }
 
-    statement::statement(statement&& other) noexcept
-        : stmt(other.release())
-    {
-    }
+        statement::statement(statement&& other) noexcept
+            : stmt(other.release())
+        {
+        }
 
-    statement& statement::operator=(statement&& other) noexcept
-    {
-        if (this != &other)
+        statement& statement::operator=(statement&& other) noexcept
+        {
+            if (this != &other)
+            {
+                finalize();
+                stmt = other.release();
+            }
+            return *this;
+        }
+
+        statement::~statement()
         {
             finalize();
-            stmt = other.release();
         }
-        return *this;
-    }
 
-    statement::~statement()
-    {
-        finalize();
-    }
-
-    result statement::finalize() noexcept
-    {
-        // sqlite3_finalize returns the error of the most recent step, which the caller has already seen; finalizing
-        // itself always succeeds.
-        const int rc = sqlite3_finalize(stmt);
-        stmt = nullptr;
-        return result(rc);
-    }
-
-    sqlite3_stmt* statement::handle() const noexcept
-    {
-        return stmt;
-    }
-
-    sqlite3_stmt* statement::release() noexcept
-    {
-        sqlite3_stmt* handle = stmt;
-        stmt = nullptr;
-        return handle;
-    }
-
-    statement::operator bool() const noexcept
-    {
-        return stmt != nullptr;
-    }
-
-    result statement::step() noexcept
-    {
-        return result(sqlite3_step(stmt));
-    }
-
-    result statement::reset() noexcept
-    {
-        return result(sqlite3_reset(stmt));
-    }
-
-    result statement::clear_bindings() noexcept
-    {
-        return result(sqlite3_clear_bindings(stmt));
-    }
-
-    bool statement::readonly() const noexcept
-    {
-        return sqlite3_stmt_readonly(stmt) != 0;
-    }
-
-    bool statement::busy() const noexcept
-    {
-        return sqlite3_stmt_busy(stmt) != 0;
-    }
-
-    static_assert(
-        static_cast<int>(statement_status::fullscan_step) == SQLITE_STMTSTATUS_FULLSCAN_STEP,
-        ""
-    );
-    static_assert(
-        static_cast<int>(statement_status::sort) == SQLITE_STMTSTATUS_SORT,
-        ""
-    );
-    static_assert(
-        static_cast<int>(statement_status::autoindex) == SQLITE_STMTSTATUS_AUTOINDEX,
-        ""
-    );
-    static_assert(
-        static_cast<int>(statement_status::vm_step) == SQLITE_STMTSTATUS_VM_STEP,
-        ""
-    );
-    static_assert(
-        static_cast<int>(statement_status::reprepare) == SQLITE_STMTSTATUS_REPREPARE,
-        ""
-    );
-    static_assert(
-        static_cast<int>(statement_status::run) == SQLITE_STMTSTATUS_RUN,
-        ""
-    );
-#if SQLITE_VERSION_NUMBER >= 3038000 // the filter counters came with SQLite 3.38
-    static_assert(
-        static_cast<int>(statement_status::filter_miss) == SQLITE_STMTSTATUS_FILTER_MISS,
-        ""
-    );
-    static_assert(
-        static_cast<int>(statement_status::filter_hit) == SQLITE_STMTSTATUS_FILTER_HIT,
-        ""
-    );
-#endif
-    static_assert(
-        static_cast<int>(statement_status::memused) == SQLITE_STMTSTATUS_MEMUSED,
-        ""
-    );
-
-    int statement::status(
-        statement_status counter,
-        bool reset_counter
-    ) noexcept
-    {
-        // Without SQLITE_ENABLE_API_ARMOR, SQLite checks neither the handle nor the counter: an empty statement would
-        // crash, and before 3.38 the filter counters lie past the end of its counter array
-        if (stmt == nullptr)
+        result statement::finalize() noexcept
         {
-            return 0;
+            // sqlite3_finalize returns the error of the most recent step, which the caller has already seen; finalizing
+            // itself always succeeds.
+            const int rc = sqlite3_finalize(stmt);
+            stmt = nullptr;
+            return result(rc);
         }
-        if ((counter == statement_status::filter_miss || counter == statement_status::filter_hit)
-            && sqlite3_libversion_number() < 3038000)
+
+        sqlite3_stmt* statement::handle() const noexcept
         {
-            return 0;
+            return stmt;
         }
-        return sqlite3_stmt_status(stmt, static_cast<int>(counter), reset_counter ? 1 : 0);
-    }
 
-    const char* statement::sql() const noexcept
-    {
-        return sqlite3_sql(stmt);
-    }
-
-    result statement::bind_null(int index) noexcept
-    {
-        return result(sqlite3_bind_null(stmt, index));
-    }
-
-    result statement::bind_int(
-        int index,
-        int value
-    ) noexcept
-    {
-        return result(sqlite3_bind_int(stmt, index, value));
-    }
-
-    result statement::bind_int64(
-        int index,
-        std::int64_t value
-    ) noexcept
-    {
-        return result(sqlite3_bind_int64(stmt, index, static_cast<sqlite3_int64>(value)));
-    }
-
-    result statement::bind_double(
-        int index,
-        double value
-    ) noexcept
-    {
-        return result(sqlite3_bind_double(stmt, index, value));
-    }
-
-    result statement::bind_text(
-        int index,
-        string_view value,
-        bind_mode mode
-    ) noexcept
-    {
-        return result(sqlite3_bind_text64(
-            stmt,
-            index,
-            non_null(value.data()),
-            static_cast<sqlite3_uint64>(value.size()),
-            destructor_for(mode),
-            SQLITE_UTF8
-        ));
-    }
-
-    result statement::bind_text16(
-        int index,
-        u16string_view value,
-        bind_mode mode
-    ) noexcept
-    {
-        return result(sqlite3_bind_text64(
-            stmt,
-            index,
-            reinterpret_cast<const char*>(non_null(value.data())),
-            static_cast<sqlite3_uint64>(value.size() * sizeof(char16_t)),
-            destructor_for(mode),
-            SQLITE_UTF16 // native byte order
-        ));
-    }
-
-    result statement::bind_blob(
-        int index,
-        const void* data,
-        std::size_t size,
-        bind_mode mode
-    ) noexcept
-    {
-        if (data == nullptr)
+        sqlite3_stmt* statement::release() noexcept
         {
-            // An empty blob, not NULL (same reasoning as for text)
-            return bind_zeroblob(index, 0);
+            sqlite3_stmt* handle = stmt;
+            stmt = nullptr;
+            return handle;
         }
-        return result(sqlite3_bind_blob64(stmt, index, data, static_cast<sqlite3_uint64>(size), destructor_for(mode)));
-    }
 
-    result statement::bind_zeroblob(
-        int index,
-        std::uint64_t size
-    ) noexcept
-    {
-        return result(sqlite3_bind_zeroblob64(stmt, index, static_cast<sqlite3_uint64>(size)));
-    }
-
-    int statement::bind_parameter_count() const noexcept
-    {
-        return sqlite3_bind_parameter_count(stmt);
-    }
-
-    int statement::bind_parameter_index(const char* name) const noexcept
-    {
-        return sqlite3_bind_parameter_index(stmt, name);
-    }
-
-    const char* statement::bind_parameter_name(int index) const noexcept
-    {
-        return sqlite3_bind_parameter_name(stmt, index);
-    }
-
-    int statement::column_count() const noexcept
-    {
-        return sqlite3_column_count(stmt);
-    }
-
-    int statement::data_count() const noexcept
-    {
-        return sqlite3_data_count(stmt);
-    }
-
-    // Without SQLITE_ENABLE_API_ARMOR, SQLite's column names don't check for an empty statement
-    const char* statement::column_name(int index) const noexcept
-    {
-        return stmt == nullptr ? nullptr : sqlite3_column_name(stmt, index);
-    }
-
-    const char* statement::column_decltype(int index) const noexcept
-    {
-        return stmt == nullptr ? nullptr : sqlite3_column_decltype(stmt, index);
-    }
-
-    value_type statement::column_type(int index) const noexcept
-    {
-        return static_cast<value_type>(sqlite3_column_type(stmt, index));
-    }
-
-    int statement::column_int(int index) const noexcept
-    {
-        return sqlite3_column_int(stmt, index);
-    }
-
-    std::int64_t statement::column_int64(int index) const noexcept
-    {
-        return static_cast<std::int64_t>(sqlite3_column_int64(stmt, index));
-    }
-
-    double statement::column_double(int index) const noexcept
-    {
-        return sqlite3_column_double(stmt, index);
-    }
-
-    optional<cstring_view> statement::column_text(int index) const noexcept
-    {
-        // Pointer first, then the size: reading the text may convert it, which changes the size.
-        const unsigned char* text = sqlite3_column_text(stmt, index);
-        if (text == nullptr)
+        statement::operator bool() const noexcept
         {
-            return nullopt;
+            return stmt != nullptr;
         }
-        const int bytes = sqlite3_column_bytes(stmt, index);
-        return cstring_view::assume_terminated(reinterpret_cast<const char*>(text), static_cast<std::size_t>(bytes));
-    }
 
-    optional<u16cstring_view> statement::column_text16(int index) const noexcept
-    {
-        const void* text = sqlite3_column_text16(stmt, index);
-        if (text == nullptr)
+        result statement::step() noexcept
         {
-            return nullopt;
+            return result(sqlite3_step(stmt));
         }
-        const int bytes = sqlite3_column_bytes16(stmt, index);
-        return u16cstring_view::assume_terminated(
-            static_cast<const char16_t*>(text),
-            static_cast<std::size_t>(bytes) / sizeof(char16_t)
+
+        result statement::reset() noexcept
+        {
+            return result(sqlite3_reset(stmt));
+        }
+
+        result statement::clear_bindings() noexcept
+        {
+            return result(sqlite3_clear_bindings(stmt));
+        }
+
+        bool statement::readonly() const noexcept
+        {
+            return sqlite3_stmt_readonly(stmt) != 0;
+        }
+
+        bool statement::busy() const noexcept
+        {
+            return sqlite3_stmt_busy(stmt) != 0;
+        }
+
+        static_assert(
+            static_cast<int>(statement_status::fullscan_step) == SQLITE_STMTSTATUS_FULLSCAN_STEP,
+            ""
         );
-    }
+        static_assert(
+            static_cast<int>(statement_status::sort) == SQLITE_STMTSTATUS_SORT,
+            ""
+        );
+        static_assert(
+            static_cast<int>(statement_status::autoindex) == SQLITE_STMTSTATUS_AUTOINDEX,
+            ""
+        );
+        static_assert(
+            static_cast<int>(statement_status::vm_step) == SQLITE_STMTSTATUS_VM_STEP,
+            ""
+        );
+        static_assert(
+            static_cast<int>(statement_status::reprepare) == SQLITE_STMTSTATUS_REPREPARE,
+            ""
+        );
+        static_assert(
+            static_cast<int>(statement_status::run) == SQLITE_STMTSTATUS_RUN,
+            ""
+        );
+#if SQLITE_VERSION_NUMBER >= 3038000 // the filter counters came with SQLite 3.38
+        static_assert(
+            static_cast<int>(statement_status::filter_miss) == SQLITE_STMTSTATUS_FILTER_MISS,
+            ""
+        );
+        static_assert(
+            static_cast<int>(statement_status::filter_hit) == SQLITE_STMTSTATUS_FILTER_HIT,
+            ""
+        );
+#endif
+        static_assert(
+            static_cast<int>(statement_status::memused) == SQLITE_STMTSTATUS_MEMUSED,
+            ""
+        );
 
-    const void* statement::column_blob(int index) const noexcept
-    {
-        return sqlite3_column_blob(stmt, index);
-    }
+        int statement::status(
+            statement_status counter,
+            bool reset_counter
+        ) noexcept
+        {
+            // Without SQLITE_ENABLE_API_ARMOR, SQLite checks neither the handle nor the counter: an empty statement
+            // would crash, and before 3.38 the filter counters lie past the end of its counter array
+            if (stmt == nullptr)
+            {
+                return 0;
+            }
+            if ((counter == statement_status::filter_miss || counter == statement_status::filter_hit)
+                && sqlite3_libversion_number() < 3038000)
+            {
+                return 0;
+            }
+            return sqlite3_stmt_status(stmt, static_cast<int>(counter), reset_counter ? 1 : 0);
+        }
 
-    std::size_t statement::column_bytes(int index) const noexcept
-    {
-        return static_cast<std::size_t>(sqlite3_column_bytes(stmt, index));
-    }
+        const char* statement::sql() const noexcept
+        {
+            return sqlite3_sql(stmt);
+        }
 
-} // native
-} // sqlitexx
+        result statement::bind_null(int index) noexcept
+        {
+            return result(sqlite3_bind_null(stmt, index));
+        }
+
+        result statement::bind_int(
+            int index,
+            int value
+        ) noexcept
+        {
+            return result(sqlite3_bind_int(stmt, index, value));
+        }
+
+        result statement::bind_int64(
+            int index,
+            std::int64_t value
+        ) noexcept
+        {
+            return result(sqlite3_bind_int64(stmt, index, static_cast<sqlite3_int64>(value)));
+        }
+
+        result statement::bind_double(
+            int index,
+            double value
+        ) noexcept
+        {
+            return result(sqlite3_bind_double(stmt, index, value));
+        }
+
+        result statement::bind_text(
+            int index,
+            string_view value,
+            bind_mode mode
+        ) noexcept
+        {
+            return result(sqlite3_bind_text64(
+                stmt,
+                index,
+                non_null(value.data()),
+                static_cast<sqlite3_uint64>(value.size()),
+                destructor_for(mode),
+                SQLITE_UTF8
+            ));
+        }
+
+        result statement::bind_text16(
+            int index,
+            u16string_view value,
+            bind_mode mode
+        ) noexcept
+        {
+            return result(sqlite3_bind_text64(
+                stmt,
+                index,
+                reinterpret_cast<const char*>(non_null(value.data())),
+                static_cast<sqlite3_uint64>(value.size() * sizeof(char16_t)),
+                destructor_for(mode),
+                SQLITE_UTF16 // native byte order
+            ));
+        }
+
+        result statement::bind_blob(
+            int index,
+            const void* data,
+            std::size_t size,
+            bind_mode mode
+        ) noexcept
+        {
+            if (data == nullptr)
+            {
+                // An empty blob, not NULL (same reasoning as for text)
+                return bind_zeroblob(index, 0);
+            }
+            return result(
+                sqlite3_bind_blob64(stmt, index, data, static_cast<sqlite3_uint64>(size), destructor_for(mode))
+            );
+        }
+
+        result statement::bind_zeroblob(
+            int index,
+            std::uint64_t size
+        ) noexcept
+        {
+            return result(sqlite3_bind_zeroblob64(stmt, index, static_cast<sqlite3_uint64>(size)));
+        }
+
+        int statement::bind_parameter_count() const noexcept
+        {
+            return sqlite3_bind_parameter_count(stmt);
+        }
+
+        int statement::bind_parameter_index(const char* name) const noexcept
+        {
+            return sqlite3_bind_parameter_index(stmt, name);
+        }
+
+        const char* statement::bind_parameter_name(int index) const noexcept
+        {
+            return sqlite3_bind_parameter_name(stmt, index);
+        }
+
+        int statement::column_count() const noexcept
+        {
+            return sqlite3_column_count(stmt);
+        }
+
+        int statement::data_count() const noexcept
+        {
+            return sqlite3_data_count(stmt);
+        }
+
+        // Without SQLITE_ENABLE_API_ARMOR, SQLite's column names don't check for an empty statement
+        const char* statement::column_name(int index) const noexcept
+        {
+            return stmt == nullptr ? nullptr : sqlite3_column_name(stmt, index);
+        }
+
+        const char* statement::column_decltype(int index) const noexcept
+        {
+            return stmt == nullptr ? nullptr : sqlite3_column_decltype(stmt, index);
+        }
+
+        value_type statement::column_type(int index) const noexcept
+        {
+            return static_cast<value_type>(sqlite3_column_type(stmt, index));
+        }
+
+        int statement::column_int(int index) const noexcept
+        {
+            return sqlite3_column_int(stmt, index);
+        }
+
+        std::int64_t statement::column_int64(int index) const noexcept
+        {
+            return static_cast<std::int64_t>(sqlite3_column_int64(stmt, index));
+        }
+
+        double statement::column_double(int index) const noexcept
+        {
+            return sqlite3_column_double(stmt, index);
+        }
+
+        optional<cstring_view> statement::column_text(int index) const noexcept
+        {
+            // Pointer first, then the size: reading the text may convert it, which changes the size.
+            const unsigned char* text = sqlite3_column_text(stmt, index);
+            if (text == nullptr)
+            {
+                return nullopt;
+            }
+            const int bytes = sqlite3_column_bytes(stmt, index);
+            return cstring_view::assume_terminated(
+                reinterpret_cast<const char*>(text),
+                static_cast<std::size_t>(bytes)
+            );
+        }
+
+        optional<u16cstring_view> statement::column_text16(int index) const noexcept
+        {
+            const void* text = sqlite3_column_text16(stmt, index);
+            if (text == nullptr)
+            {
+                return nullopt;
+            }
+            const int bytes = sqlite3_column_bytes16(stmt, index);
+            return u16cstring_view::assume_terminated(
+                static_cast<const char16_t*>(text),
+                static_cast<std::size_t>(bytes) / sizeof(char16_t)
+            );
+        }
+
+        const void* statement::column_blob(int index) const noexcept
+        {
+            return sqlite3_column_blob(stmt, index);
+        }
+
+        std::size_t statement::column_bytes(int index) const noexcept
+        {
+            return static_cast<std::size_t>(sqlite3_column_bytes(stmt, index));
+        }
+
+    } // native
+} // sqlite
+} // sqlnx

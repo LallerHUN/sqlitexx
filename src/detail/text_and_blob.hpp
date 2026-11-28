@@ -1,44 +1,47 @@
-#ifndef SQLITEXX_DETAIL_TEXT_AND_BLOB_HPP
-#define SQLITEXX_DETAIL_TEXT_AND_BLOB_HPP
+#ifndef SQLNX_SQLITE_DETAIL_TEXT_AND_BLOB_HPP
+#define SQLNX_SQLITE_DETAIL_TEXT_AND_BLOB_HPP
 
 #include <sqlite3.h>
 
-#include "sqlitexx/native/flags.hpp"
+#include "sqlnx/sqlite/native/flags.hpp"
 
-namespace sqlitexx
+namespace sqlnx
 {
-namespace native
+namespace sqlite
 {
-    // Shared by binding (statement) and SQL function results (context)
-
-    inline sqlite3_destructor_type destructor_for(bind_mode mode) noexcept
+    namespace native
     {
-        if (mode == bind_mode::no_copy)
-        {
-            return SQLITE_STATIC;
-        }
-        return SQLITE_TRANSIENT;
-    }
+        // Shared by binding (statement) and SQL function results (context)
 
-    // SQLite binds NULL for a null pointer, but an empty string_view may well have one. Text must stay text.
-    inline const char* non_null(const char* text) noexcept
-    {
-        if (text == nullptr)
+        inline sqlite3_destructor_type destructor_for(bind_mode mode) noexcept
         {
-            return "";
+            if (mode == bind_mode::no_copy)
+            {
+                return SQLITE_STATIC;
+            }
+            return SQLITE_TRANSIENT;
         }
-        return text;
-    }
 
-    inline const char16_t* non_null(const char16_t* text) noexcept
-    {
-        if (text == nullptr)
+        // SQLite binds NULL for a null pointer, but an empty string_view may well have one. Text must stay text.
+        inline const char* non_null(const char* text) noexcept
         {
-            return u"";
+            if (text == nullptr)
+            {
+                return "";
+            }
+            return text;
         }
-        return text;
-    }
-} // native
-} // sqlitexx
 
-#endif // SQLITEXX_DETAIL_TEXT_AND_BLOB_HPP
+        inline const char16_t* non_null(const char16_t* text) noexcept
+        {
+            if (text == nullptr)
+            {
+                return u"";
+            }
+            return text;
+        }
+    } // native
+} // sqlite
+} // sqlnx
+
+#endif // SQLNX_SQLITE_DETAIL_TEXT_AND_BLOB_HPP

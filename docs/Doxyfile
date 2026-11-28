@@ -1,17 +1,17 @@
-# Doxygen configuration for the sqlitexx reference. Build it with tools/docs.sh, which fetches the doxygen-awesome-css
+# Doxygen configuration for the sqlnx reference. Build it with tools/docs.sh, which fetches the doxygen-awesome-css
 # theme into build/docs/theme and sets PROJECT_NUMBER from CMakeLists.txt. The output goes to build/docs/html.
 
-PROJECT_NAME           = sqlitexx
+PROJECT_NAME           = sqlnx
 PROJECT_BRIEF          = "C++ wrapper for SQLite: errors as expected<T, error>, no exceptions, two layers"
 OUTPUT_DIRECTORY       = ../build/docs
 CREATE_SUBDIRS         = NO
 
 # What to read: the public headers and the README as the main page. detail/ is the implementation.
-INPUT                  = ../README.md ../CONTRIBUTING.md ../CHANGELOG.md ../include/sqlitexx
+INPUT                  = ../README.md ../CONTRIBUTING.md ../CHANGELOG.md ../include/sqlnx
 FILE_PATTERNS          = *.hpp *.md
 RECURSIVE              = YES
-EXCLUDE                = ../include/sqlitexx/detail
-EXCLUDE_SYMBOLS        = detail detail::* sqlitexx::detail sqlitexx::detail::*
+EXCLUDE                = ../include/sqlnx/sqlite/detail
+EXCLUDE_SYMBOLS        = detail detail::* sqlnx::sqlite::detail sqlnx::sqlite::detail::*
 USE_MDFILE_AS_MAINPAGE = ../README.md
 STRIP_FROM_PATH        = ../include
 STRIP_FROM_INC_PATH    = ../include
@@ -33,12 +33,12 @@ SHOW_INCLUDE_FILES     = YES
 ENABLE_PREPROCESSING   = YES
 MACRO_EXPANSION        = YES
 EXPAND_ONLY_PREDEF     = YES
-PREDEFINED             = SQLITEXX_DETAIL_NODISCARD=[[nodiscard]] \
-                         SQLITEXX_USE_STD_CXX17_TYPES=1 \
-                         SQLITEXX_USE_STD_EXPECTED=1 \
-                         SQLITEXX_CPLUSPLUS=202302L \
-                         SQLITEXX_DETAIL_EXCEPTIONS=1
-EXPAND_AS_DEFINED      = SQLITEXX_DETAIL_NODISCARD
+PREDEFINED             = SQLNX_DETAIL_NODISCARD=[[nodiscard]] \
+                         SQLNX_USE_STD_CXX17_TYPES=1 \
+                         SQLNX_USE_STD_EXPECTED=1 \
+                         SQLNX_CPLUSPLUS=202302L \
+                         SQLNX_DETAIL_EXCEPTIONS=1
+EXPAND_AS_DEFINED      = SQLNX_DETAIL_NODISCARD
 
 # HTML only, with the doxygen-awesome theme
 GENERATE_HTML          = YES

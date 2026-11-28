@@ -1,7 +1,7 @@
 // Tests for database::create_aggregate: aggregate and window functions written in C++.
 
 #include "check.hpp"
-#include "sqlitexx/sqlitexx.hpp"
+#include "sqlnx/sqlite.hpp"
 
 #include <cstdint>
 #include <memory>
@@ -11,18 +11,18 @@
 
 #if defined(__cpp_exceptions) || defined(__EXCEPTIONS) || defined(_CPPUNWIND)
 #include <stdexcept>
-#define SQLITEXX_TEST_EXCEPTIONS 1
+#define SQLNX_TEST_EXCEPTIONS 1
 #else
-#define SQLITEXX_TEST_EXCEPTIONS 0
+#define SQLNX_TEST_EXCEPTIONS 0
 #endif
 
-using sqlitexx::database;
-using sqlitexx::error;
-using sqlitexx::expected;
-using sqlitexx::optional;
-using sqlitexx::unexpect;
-using sqlitexx::native::extended_code;
-using sqlitexx::native::primary_code;
+using sqlnx::sqlite::database;
+using sqlnx::sqlite::error;
+using sqlnx::sqlite::expected;
+using sqlnx::sqlite::optional;
+using sqlnx::sqlite::unexpect;
+using sqlnx::sqlite::native::extended_code;
+using sqlnx::sqlite::native::primary_code;
 
 namespace
 {
@@ -75,7 +75,7 @@ struct checked_sum
             return expected<void>(
                 unexpect,
                 error(
-                    sqlitexx::native::result(static_cast<int>(extended_code::constraint_check)),
+                    sqlnx::sqlite::native::result(static_cast<int>(extended_code::constraint_check)),
                     "checked_sum: negative value"
                 )
             );
@@ -90,7 +90,10 @@ struct checked_sum
         {
             return expected<std::int64_t>(
                 unexpect,
-                error(sqlitexx::native::result(static_cast<int>(primary_code::range)), "checked_sum: over the limit")
+                error(
+                    sqlnx::sqlite::native::result(static_cast<int>(primary_code::range)),
+                    "checked_sum: over the limit"
+                )
             );
         }
         return sum;
@@ -138,7 +141,7 @@ struct tracked
     }
 };
 
-#if SQLITEXX_TEST_EXCEPTIONS
+#if SQLNX_TEST_EXCEPTIONS
 struct throwing
 {
     void step(int value)
@@ -179,7 +182,7 @@ expected<T> select(
     const char* sql
 )
 {
-    return db.prepare(sql).and_then(sqlitexx::first<T>());
+    return db.prepare(sql).and_then(sqlnx::sqlite::first<T>());
 }
 
 void test_groups_and_prototype()
@@ -193,7 +196,7 @@ void test_groups_and_prototype()
     std::vector<std::string> lists;
     CHECK(db.prepare("SELECT joined(name) FROM (SELECT * FROM score ORDER BY name) GROUP BY team ORDER BY team")
               .and_then(
-                  sqlitexx::for_each_row<std::string>(
+                  sqlnx::sqlite::for_each_row<std::string>(
                       [&](const std::string& list)
                       {
                           lists.push_back(list);
@@ -278,7 +281,7 @@ void test_window()
                 " FROM score WHERE points IS NOT NULL ORDER BY name"
     )
               .and_then(
-                  sqlitexx::for_each_row<std::int64_t>(
+                  sqlnx::sqlite::for_each_row<std::int64_t>(
                       [&](std::int64_t sum)
                       {
                           sums.push_back(sum);
@@ -311,7 +314,7 @@ void test_lifetime()
         CHECK(token.use_count() == 3);
 
         // Also when a query stops early
-        expected<sqlitexx::statement> partial = db.prepare("SELECT team, tracked(1) FROM score GROUP BY team");
+        expected<sqlnx::sqlite::statement> partial = db.prepare("SELECT team, tracked(1) FROM score GROUP BY team");
         CHECK(partial && partial->step().has_value());
         CHECK(partial && partial->reset().has_value());
         CHECK(token.use_count() == 3);
@@ -320,7 +323,7 @@ void test_lifetime()
     CHECK(token.use_count() == 1);
 }
 
-#if SQLITEXX_TEST_EXCEPTIONS
+#if SQLNX_TEST_EXCEPTIONS
 void test_exceptions()
 {
     database db = open_scores();
@@ -339,7 +342,7 @@ int main()
     test_errors();
     test_window();
     test_lifetime();
-#if SQLITEXX_TEST_EXCEPTIONS
+#if SQLNX_TEST_EXCEPTIONS
     test_exceptions();
 #endif
     return test::summary();

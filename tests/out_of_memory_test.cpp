@@ -1,4 +1,4 @@
-// Tests for running out of memory: sqlitexx gives primary_code::nomem errors instead of letting std::bad_alloc out, and
+// Tests for running out of memory: sqlnx gives primary_code::nomem errors instead of letting std::bad_alloc out, and
 // the calls that cannot throw say so with noexcept.
 //
 // With exceptions enabled, the global operator new is replaced by one that can be told to refuse allocations: each
@@ -13,7 +13,7 @@
 #endif
 
 #include "check.hpp"
-#include "sqlitexx/sqlitexx.hpp"
+#include "sqlnx/sqlite.hpp"
 
 #include <array>
 #include <cstddef>
@@ -27,28 +27,28 @@
 #include <vector>
 
 #if defined(__cpp_exceptions) || defined(__EXCEPTIONS) || defined(_CPPUNWIND)
-#define SQLITEXX_TEST_EXCEPTIONS 1
+#define SQLNX_TEST_EXCEPTIONS 1
 #else
-#define SQLITEXX_TEST_EXCEPTIONS 0
+#define SQLNX_TEST_EXCEPTIONS 0
 #endif
 
 // MSVC's iterator debugging (Debug builds) gives every std::string a proxy object on the heap, even an empty one, and
 // its noexcept constructors end the program when that allocation fails. With memory gone, the standard library stops
 // the program itself, so the runs that refuse allocations are left out there.
 #if defined(_ITERATOR_DEBUG_LEVEL) && _ITERATOR_DEBUG_LEVEL == 2
-#define SQLITEXX_TEST_DEBUG_PROXIES 1
+#define SQLNX_TEST_DEBUG_PROXIES 1
 #else
-#define SQLITEXX_TEST_DEBUG_PROXIES 0
+#define SQLNX_TEST_DEBUG_PROXIES 0
 #endif
 
-using sqlitexx::blob;
-using sqlitexx::database;
-using sqlitexx::error;
-using sqlitexx::expected;
-using sqlitexx::optional;
-using sqlitexx::statement;
-using sqlitexx::native::extended_code;
-using sqlitexx::native::primary_code;
+using sqlnx::sqlite::blob;
+using sqlnx::sqlite::database;
+using sqlnx::sqlite::error;
+using sqlnx::sqlite::expected;
+using sqlnx::sqlite::optional;
+using sqlnx::sqlite::statement;
+using sqlnx::sqlite::native::extended_code;
+using sqlnx::sqlite::native::primary_code;
 
 // A type whose traits make no promise: the calls using it are not noexcept
 struct loose
@@ -61,52 +61,55 @@ struct greedy
 {
 };
 
-namespace sqlitexx
+namespace sqlnx
 {
-template <>
-struct value_traits<loose>
+namespace sqlite
 {
-    template <class Target>
-    static native::result bind(
-        Target& stmt,
-        int index,
-        const loose& value
-    )
+    template <>
+    struct value_traits<loose>
     {
-        return stmt.bind_int(index, value.value);
-    }
+        template <class Target>
+        static native::result bind(
+            Target& stmt,
+            int index,
+            const loose& value
+        )
+        {
+            return stmt.bind_int(index, value.value);
+        }
 
-    template <class Source>
-    static expected<loose> read(
-        const Source& stmt,
-        int index
-    )
-    {
-        return loose{stmt.column_int(index)};
-    }
-};
+        template <class Source>
+        static expected<loose> read(
+            const Source& stmt,
+            int index
+        )
+        {
+            return loose{stmt.column_int(index)};
+        }
+    };
 
-template <>
-struct value_traits<greedy>
-{
-    template <class Source>
-    static expected<greedy> read(
-        const Source&,
-        int
-    )
+    template <>
+    struct value_traits<greedy>
     {
+        template <class Source>
+        static expected<greedy> read(
+            const Source&,
+            int
+        )
+        {
 #if defined(__cpp_exceptions) || defined(__EXCEPTIONS) || defined(_CPPUNWIND)
-        throw std::bad_alloc();
+            throw std::bad_alloc();
 #else
-        return greedy();
+            return greedy();
 #endif
-    }
-};
-} // sqlitexx
+        }
+    };
+} // sqlite
+} // sqlnx
 
 // Compile-time checks: noexcept(expression) must hold, or must not
-#define SQLITEXX_TEST_NOEXCEPT(...) static_assert(noexcept(__VA_ARGS__), #__VA_ARGS__)
-#define SQLITEXX_TEST_NOT_NOEXCEPT(...) static_assert(!noexcept(__VA_ARGS__), #__VA_ARGS__)
+#define SQLNX_TEST_NOEXCEPT(...) static_assert(noexcept(__VA_ARGS__), #__VA_ARGS__)
+#define SQLNX_TEST_NOT_NOEXCEPT(...) static_assert(!noexcept(__VA_ARGS__), #__VA_ARGS__)
 
 // Registering copies the callable: noexcept when the copy cannot throw
 struct no_capture
@@ -140,8 +143,8 @@ struct string_capture
 struct backwards
 {
     int operator()(
-        sqlitexx::string_view first,
-        sqlitexx::string_view second
+        sqlnx::sqlite::string_view first,
+        sqlnx::sqlite::string_view second
     ) const
     {
         return second.compare(first);
@@ -153,8 +156,8 @@ struct backwards_named
     std::string name;
 
     int operator()(
-        sqlitexx::string_view first,
-        sqlitexx::string_view second
+        sqlnx::sqlite::string_view first,
+        sqlnx::sqlite::string_view second
     ) const
     {
         return second.compare(first);
@@ -175,65 +178,65 @@ struct yes_hook
 inline void noexcept_checks(
     database& db,
     statement& stmt,
-    sqlitexx::blob_stream& stream,
+    sqlnx::sqlite::blob_stream& stream,
     const std::string& name,
-    sqlitexx::string_view view,
+    sqlnx::sqlite::string_view view,
     const no_capture& plain,
     const string_capture& capturing,
     const backwards_named& named_collation
 )
 {
     // The calls that run none of the user's code
-    SQLITEXX_TEST_NOEXCEPT(database::open(":memory:"));
-    SQLITEXX_TEST_NOEXCEPT(db.execute(""));
-    SQLITEXX_TEST_NOEXCEPT(db.prepare(view));
-    SQLITEXX_TEST_NOEXCEPT(db.backup_to(db));
-    SQLITEXX_TEST_NOEXCEPT(db.open_blob("t", "c", 1));
-    SQLITEXX_TEST_NOEXCEPT(stmt.step());
-    SQLITEXX_TEST_NOEXCEPT(stmt.reset());
-    SQLITEXX_TEST_NOEXCEPT(stmt.column_index(view));
-    SQLITEXX_TEST_NOEXCEPT(stream.write(nullptr, 0));
-    SQLITEXX_TEST_NOEXCEPT(sqlitexx::transaction::begin(db));
-    SQLITEXX_TEST_NOEXCEPT(sqlitexx::detail::out_of_memory());
+    SQLNX_TEST_NOEXCEPT(database::open(":memory:"));
+    SQLNX_TEST_NOEXCEPT(db.execute(""));
+    SQLNX_TEST_NOEXCEPT(db.prepare(view));
+    SQLNX_TEST_NOEXCEPT(db.backup_to(db));
+    SQLNX_TEST_NOEXCEPT(db.open_blob("t", "c", 1));
+    SQLNX_TEST_NOEXCEPT(stmt.step());
+    SQLNX_TEST_NOEXCEPT(stmt.reset());
+    SQLNX_TEST_NOEXCEPT(stmt.column_index(view));
+    SQLNX_TEST_NOEXCEPT(stream.write(nullptr, 0));
+    SQLNX_TEST_NOEXCEPT(sqlnx::sqlite::transaction::begin(db));
+    SQLNX_TEST_NOEXCEPT(sqlnx::sqlite::detail::out_of_memory());
 
     // Binding and reading follow the value_traits: noexcept for the built-in types, also those that allocate
-    SQLITEXX_TEST_NOEXCEPT(stmt.bind(1, name, "text", nullptr));
-    SQLITEXX_TEST_NOEXCEPT(stmt.execute(2.5, optional<int>()));
-    SQLITEXX_TEST_NOEXCEPT(stmt.column<std::string>(0));
-    SQLITEXX_TEST_NOEXCEPT(stmt.column<blob>(view));
-    SQLITEXX_TEST_NOEXCEPT(stmt.column<optional<std::string>>(0));
-    SQLITEXX_TEST_NOEXCEPT(stmt.first<std::string, optional<std::int64_t>>());
-    SQLITEXX_TEST_NOT_NOEXCEPT(stmt.bind(loose{1}));
-    SQLITEXX_TEST_NOT_NOEXCEPT(stmt.column<loose>(0));
-    SQLITEXX_TEST_NOT_NOEXCEPT(stmt.first<std::string, loose>());
+    SQLNX_TEST_NOEXCEPT(stmt.bind(1, name, "text", nullptr));
+    SQLNX_TEST_NOEXCEPT(stmt.execute(2.5, optional<int>()));
+    SQLNX_TEST_NOEXCEPT(stmt.column<std::string>(0));
+    SQLNX_TEST_NOEXCEPT(stmt.column<blob>(view));
+    SQLNX_TEST_NOEXCEPT(stmt.column<optional<std::string>>(0));
+    SQLNX_TEST_NOEXCEPT(stmt.first<std::string, optional<std::int64_t>>());
+    SQLNX_TEST_NOT_NOEXCEPT(stmt.bind(loose{1}));
+    SQLNX_TEST_NOT_NOEXCEPT(stmt.column<loose>(0));
+    SQLNX_TEST_NOT_NOEXCEPT(stmt.first<std::string, loose>());
 
     // What is kept is taken by value: an lvalue is copied at the call, which noexcept(...) includes
-    SQLITEXX_TEST_NOEXCEPT(db.create_function("f", plain));
-    SQLITEXX_TEST_NOEXCEPT(db.create_function("f", no_capture()));
-    SQLITEXX_TEST_NOT_NOEXCEPT(db.create_function("f", capturing));
-    SQLITEXX_TEST_NOEXCEPT(db.create_function("f", string_capture()));
-    SQLITEXX_TEST_NOEXCEPT(db.create_collation("c", backwards()));
-    SQLITEXX_TEST_NOT_NOEXCEPT(db.create_collation("c", named_collation));
-    SQLITEXX_TEST_NOEXCEPT(db.create_collation("c", backwards_named()));
-    SQLITEXX_TEST_NOEXCEPT(db.remove_function("f", 1));
-    SQLITEXX_TEST_NOEXCEPT(db.remove_collation("c"));
-    SQLITEXX_TEST_NOEXCEPT(db.create_function("f", plain, std::declval<sqlitexx::registrations&>()));
-    SQLITEXX_TEST_NOT_NOEXCEPT(db.create_function("f", capturing, std::declval<sqlitexx::registrations&>()));
-    SQLITEXX_TEST_NOEXCEPT(db.create_collation("c", backwards(), std::declval<sqlitexx::registrations&>()));
-    SQLITEXX_TEST_NOEXCEPT(std::declval<sqlitexx::registrations&>().remove());
-    SQLITEXX_TEST_NOEXCEPT(std::declval<sqlitexx::registrations&>().release());
-    SQLITEXX_TEST_NOEXCEPT(db.commit_hook(yes_hook()));
-    SQLITEXX_TEST_NOEXCEPT(db.progress_handler(100, yes_hook(), std::declval<sqlitexx::registrations&>()));
-    SQLITEXX_TEST_NOEXCEPT(db.update_hook(nullptr));
-    SQLITEXX_TEST_NOEXCEPT(sqlitexx::execute_with("Alice", 42));
-    SQLITEXX_TEST_NOEXCEPT(sqlitexx::execute_with(std::string()));
-    SQLITEXX_TEST_NOT_NOEXCEPT(sqlitexx::execute_with(name));
-    SQLITEXX_TEST_NOT_NOEXCEPT(sqlitexx::bind_values(name));
-    SQLITEXX_TEST_NOEXCEPT(sqlitexx::for_each_row<int>(plain));
-    SQLITEXX_TEST_NOEXCEPT(sqlitexx::on(primary_code::busy, zero_on_error()));
+    SQLNX_TEST_NOEXCEPT(db.create_function("f", plain));
+    SQLNX_TEST_NOEXCEPT(db.create_function("f", no_capture()));
+    SQLNX_TEST_NOT_NOEXCEPT(db.create_function("f", capturing));
+    SQLNX_TEST_NOEXCEPT(db.create_function("f", string_capture()));
+    SQLNX_TEST_NOEXCEPT(db.create_collation("c", backwards()));
+    SQLNX_TEST_NOT_NOEXCEPT(db.create_collation("c", named_collation));
+    SQLNX_TEST_NOEXCEPT(db.create_collation("c", backwards_named()));
+    SQLNX_TEST_NOEXCEPT(db.remove_function("f", 1));
+    SQLNX_TEST_NOEXCEPT(db.remove_collation("c"));
+    SQLNX_TEST_NOEXCEPT(db.create_function("f", plain, std::declval<sqlnx::sqlite::registrations&>()));
+    SQLNX_TEST_NOT_NOEXCEPT(db.create_function("f", capturing, std::declval<sqlnx::sqlite::registrations&>()));
+    SQLNX_TEST_NOEXCEPT(db.create_collation("c", backwards(), std::declval<sqlnx::sqlite::registrations&>()));
+    SQLNX_TEST_NOEXCEPT(std::declval<sqlnx::sqlite::registrations&>().remove());
+    SQLNX_TEST_NOEXCEPT(std::declval<sqlnx::sqlite::registrations&>().release());
+    SQLNX_TEST_NOEXCEPT(db.commit_hook(yes_hook()));
+    SQLNX_TEST_NOEXCEPT(db.progress_handler(100, yes_hook(), std::declval<sqlnx::sqlite::registrations&>()));
+    SQLNX_TEST_NOEXCEPT(db.update_hook(nullptr));
+    SQLNX_TEST_NOEXCEPT(sqlnx::sqlite::execute_with("Alice", 42));
+    SQLNX_TEST_NOEXCEPT(sqlnx::sqlite::execute_with(std::string()));
+    SQLNX_TEST_NOT_NOEXCEPT(sqlnx::sqlite::execute_with(name));
+    SQLNX_TEST_NOT_NOEXCEPT(sqlnx::sqlite::bind_values(name));
+    SQLNX_TEST_NOEXCEPT(sqlnx::sqlite::for_each_row<int>(plain));
+    SQLNX_TEST_NOEXCEPT(sqlnx::sqlite::on(primary_code::busy, zero_on_error()));
 }
 
-#if SQLITEXX_TEST_EXCEPTIONS
+#if SQLNX_TEST_EXCEPTIONS
 
 namespace
 {
@@ -357,7 +360,7 @@ enum class outcome
     wrong
 };
 
-// Copying these allocates nothing: what sqlitexx copies is tested, not the copy constructors of the user's types
+// Copying these allocates nothing: what sqlnx copies is tested, not the copy constructors of the user's types
 struct greeter
 {
     const std::string* prefix;
@@ -384,7 +387,7 @@ struct joined
     }
 };
 
-// The values the scenarios work with, made before allocations are limited: only sqlitexx allocates while they run
+// The values the scenarios work with, made before allocations are limited: only sqlnx allocates while they run
 struct inputs
 {
     std::string long_name = std::string(100, 'n');
@@ -599,7 +602,7 @@ outcome blobs(const inputs& in)
         return out;
     }
 
-    expected<sqlitexx::blob_stream> stream = db->open_blob("b", "data", 1, sqlitexx::blob_access::read_write);
+    expected<sqlnx::sqlite::blob_stream> stream = db->open_blob("b", "data", 1, sqlnx::sqlite::blob_access::read_write);
     if (failed(stream, out))
     {
         return out;
@@ -660,14 +663,14 @@ outcome functions(const inputs& in)
     {
         return out;
     }
-    // sqlitexx copies the function, the prototype and the collation, and their strings allocate
+    // sqlnx copies the function, the prototype and the collation, and their strings allocate
     if (failed(db->create_function("greet", in.greet), out) || failed(db->create_aggregate("joined", in.prototype), out)
         || failed(db->create_collation("backwards", backwards()), out))
     {
         return out;
     }
     // With a token, the control block and the name it keeps allocate too
-    sqlitexx::registrations scope;
+    sqlnx::sqlite::registrations scope;
     if (failed(db->create_function("scoped_greet", in.greet, scope), out)
         || failed(db->create_collation("scoped_backwards", backwards(), scope), out) || failed(scope.remove(), out))
     {
@@ -712,7 +715,7 @@ outcome transactions_and_backups(const inputs& in)
     {
         return out;
     }
-    expected<std::int64_t> id = sqlitexx::in_transaction(
+    expected<std::int64_t> id = sqlnx::sqlite::in_transaction(
         *db,
         [&]() -> expected<std::int64_t>
         {
@@ -723,7 +726,7 @@ outcome transactions_and_backups(const inputs& in)
                         return db->prepare("INSERT INTO t VALUES(?)");
                     }
                 )
-                .and_then(sqlitexx::execute_with(sqlitexx::string_view(in.long_name)))
+                .and_then(sqlnx::sqlite::execute_with(sqlnx::sqlite::string_view(in.long_name)))
                 .transform(
                     [&]
                     {
@@ -804,7 +807,7 @@ void exhaust(
     }
 }
 
-// sqlitexx catches only its own allocations: what the user's traits throw reaches the caller, and the statement stays
+// sqlnx catches only its own allocations: what the user's traits throw reaches the caller, and the statement stays
 // usable
 void test_user_exceptions_pass_through()
 {
@@ -838,13 +841,13 @@ void test_user_exceptions_pass_through()
 // A function rather than the macro in an if: compilers warn about constant conditions
 bool allocations_can_be_refused()
 {
-    return SQLITEXX_TEST_DEBUG_PROXIES == 0;
+    return SQLNX_TEST_DEBUG_PROXIES == 0;
 }
 
 void test_out_of_memory_error_allocates_nothing()
 {
     allow_allocations(0);
-    const error e = sqlitexx::detail::out_of_memory();
+    const error e = sqlnx::sqlite::detail::out_of_memory();
     const bool ran_out = stop_limiting();
     CHECK(!ran_out);
     CHECK(e.primary() == primary_code::nomem);
@@ -856,7 +859,7 @@ void test_out_of_memory_error_allocates_nothing()
 
 int main()
 {
-#if SQLITEXX_TEST_EXCEPTIONS
+#if SQLNX_TEST_EXCEPTIONS
     test_user_exceptions_pass_through();
     if (allocations_can_be_refused())
     {

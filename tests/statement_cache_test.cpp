@@ -2,7 +2,7 @@
 // counted through the C API, which is why this test, unlike the others, includes sqlite3.h.
 
 #include "check.hpp"
-#include "sqlitexx/sqlitexx.hpp"
+#include "sqlnx/sqlite.hpp"
 
 #include <sqlite3.h>
 
@@ -12,9 +12,9 @@
 #include <utility>
 #include <vector>
 
-using sqlitexx::database;
-using sqlitexx::expected;
-using sqlitexx::native::primary_code;
+using sqlnx::sqlite::database;
+using sqlnx::sqlite::expected;
+using sqlnx::sqlite::native::primary_code;
 
 namespace
 {
@@ -68,7 +68,7 @@ void test_reuse()
 
     // prepare() is never cached
     {
-        expected<sqlitexx::statement> own = db.prepare("SELECT count(*) FROM number");
+        expected<sqlnx::sqlite::statement> own = db.prepare("SELECT count(*) FROM number");
         CHECK(own.has_value());
         CHECK(open_statements(db) == 3);
     }
@@ -82,8 +82,8 @@ void test_held_results()
 
     // Two results of the same SQL at once: the second prepares its own, and both are kept afterwards
     {
-        sqlitexx::results<int> first = db.query<int>("SELECT n FROM number ORDER BY n");
-        sqlitexx::results<int> second = db.query<int>("SELECT n FROM number ORDER BY n");
+        sqlnx::sqlite::results<int> first = db.query<int>("SELECT n FROM number ORDER BY n");
+        sqlnx::sqlite::results<int> second = db.query<int>("SELECT n FROM number ORDER BY n");
         CHECK(open_statements(db) == 2);
         expected<std::vector<int>> a = first.all();
         expected<std::vector<int>> b = second.all();
@@ -94,7 +94,7 @@ void test_held_results()
     // Five at once: two copies are kept, and the other SQL stays cached
     CHECK(count_numbers(db) == 3);
     {
-        std::vector<sqlitexx::results<int>> many;
+        std::vector<sqlnx::sqlite::results<int>> many;
         for (int i = 0; i < 5; ++i)
         {
             many.push_back(db.query<int>("SELECT n FROM number ORDER BY n"));
@@ -107,8 +107,8 @@ void test_held_results()
 
     // A moved results gives its statement back once
     {
-        sqlitexx::results<int> moved = db.query<int>("SELECT n FROM number ORDER BY n");
-        sqlitexx::results<int> target = std::move(moved);
+        sqlnx::sqlite::results<int> moved = db.query<int>("SELECT n FROM number ORDER BY n");
+        sqlnx::sqlite::results<int> target = std::move(moved);
         expected<int> one = target.first();
         CHECK(one && *one == 1);
     }
@@ -169,7 +169,7 @@ void test_returned_clean()
 void test_lifetime()
 {
     // A results that outlives its database still reads, and then finalizes its statement
-    sqlitexx::results<int> survivor = []
+    sqlnx::sqlite::results<int> survivor = []
     {
         database db = open_numbers();
         CHECK(db.execute("INSERT INTO number(n) VALUES(7)").has_value());

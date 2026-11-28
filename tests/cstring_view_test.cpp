@@ -1,14 +1,14 @@
 // Tests for cstring_view on its own, without SQLite.
 
 #include "check.hpp"
-#include "sqlitexx/cstring_view.hpp"
+#include "sqlnx/sqlite/cstring_view.hpp"
 
 #include <cstring>
 #include <string>
 
-using sqlitexx::cstring_view;
-using sqlitexx::string_view;
-using sqlitexx::u16cstring_view;
+using sqlnx::sqlite::cstring_view;
+using sqlnx::sqlite::string_view;
+using sqlnx::sqlite::u16cstring_view;
 
 namespace
 {

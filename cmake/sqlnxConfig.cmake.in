@@ -1,0 +1,33 @@
+# CMake package for sqlnx @PROJECT_VERSION@: find_package(sqlnx) gives the target sqlnx::sqlite.
+
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+# This sqlnx was built with:
+#   SQLite:                   @sqlnx_sqlite_summary@
+#   expected:                 @sqlnx_expected_summary@
+#   string_view and optional: @sqlnx_cxx17_summary@
+set(sqlnx_EXPECTED "@sqlnx_expected@")
+set(sqlnx_CXX17_TYPES "@sqlnx_cxx17_types@")
+
+if(@sqlnx_needs_threads@)
+    find_dependency(Threads)
+endif()
+
+if(@SQLNX_USE_SYSTEM_SQLITE@)
+    find_dependency(SQLite3 @SQLNX_SQLITE_MIN_VERSION@)
+endif()
+
+if(@sqlnx_needs_expected_lite@)
+    find_dependency(expected-lite CONFIG)
+endif()
+
+if(@sqlnx_needs_lite_types@)
+    find_dependency(string-view-lite CONFIG)
+    find_dependency(optional-lite CONFIG)
+endif()
+
+include("${CMAKE_CURRENT_LIST_DIR}/sqlnxTargets.cmake")
+
+check_required_components(sqlnx)

@@ -1,14 +1,14 @@
 // Tests for the native layer.
 
 #include "check.hpp"
-#include "sqlitexx/sqlitexx.hpp"
+#include "sqlnx/sqlite.hpp"
 
 #include <cstring>
 #include <utility>
 
-using namespace sqlitexx::native;
-using sqlitexx::string_view;
-using sqlitexx::u16string_view;
+using namespace sqlnx::sqlite::native;
+using sqlnx::sqlite::string_view;
+using sqlnx::sqlite::u16string_view;
 
 namespace
 {
@@ -103,7 +103,7 @@ void test_text_is_terminated()
     CHECK(stmt.bind_text(2, string_view("a\0b", 3)).ok());
     CHECK(stmt.step().row());
 
-    sqlitexx::optional<sqlitexx::cstring_view> text = stmt.column_text(0);
+    sqlnx::sqlite::optional<sqlnx::sqlite::cstring_view> text = stmt.column_text(0);
     CHECK(text && text->size() == 2);
     CHECK(text && std::strcmp(text->c_str(), "ab") == 0);
     CHECK(text && (*text)[2] == '\0');
@@ -248,10 +248,10 @@ void test_moves_and_statement_outliving_connection()
 void test_empty_statement()
 {
     // An empty statement answers without reaching SQLite, which wouldn't check the handle
-    sqlitexx::native::statement empty;
-    CHECK(empty.status(sqlitexx::native::statement_status::vm_step) == 0);
-    CHECK(empty.status(sqlitexx::native::statement_status::memused) == 0);
-    CHECK(empty.status(sqlitexx::native::statement_status::filter_hit, true) == 0);
+    sqlnx::sqlite::native::statement empty;
+    CHECK(empty.status(sqlnx::sqlite::native::statement_status::vm_step) == 0);
+    CHECK(empty.status(sqlnx::sqlite::native::statement_status::memused) == 0);
+    CHECK(empty.status(sqlnx::sqlite::native::statement_status::filter_hit, true) == 0);
     CHECK(empty.column_name(0) == nullptr);
     CHECK(empty.column_decltype(0) == nullptr);
     CHECK(empty.column_count() == 0);

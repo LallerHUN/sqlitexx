@@ -1,0 +1,421 @@
+#ifndef SQLNX_SQLITE_DATABASE_HPP
+#define SQLNX_SQLITE_DATABASE_HPP
+
+#include "sqlnx/sqlite/backup.hpp"
+#include "sqlnx/sqlite/blob_stream.hpp"
+#include "sqlnx/sqlite/config.hpp"
+#include "sqlnx/sqlite/cstring_view.hpp"
+#include "sqlnx/sqlite/detail/cache_lease.hpp"
+#include "sqlnx/sqlite/detail/hook_slots.hpp"
+#include "sqlnx/sqlite/detail/noexcept_traits.hpp"
+#include "sqlnx/sqlite/detail/statement_cache.hpp"
+#include "sqlnx/sqlite/error.hpp"
+#include "sqlnx/sqlite/expected.hpp"
+#include "sqlnx/sqlite/native/connection.hpp"
+#include "sqlnx/sqlite/native/flags.hpp"
+#include "sqlnx/sqlite/registrations.hpp"
+#include "sqlnx/sqlite/results.hpp"
+#include "sqlnx/sqlite/statement.hpp"
+
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <type_traits>
+
+namespace sqlnx
+{
+namespace sqlite
+{
+    /// A database connection with a typed API. Move-only. Statements may outlive it (the native layer closes
+    /// connections with sqlite3_close_v2).
+    class database final
+    {
+    public:
+        database() noexcept = default;
+
+        database(database&&) noexcept = default;
+        database& operator=(database&& other) noexcept;
+
+        database(const database&) = delete;
+        database& operator=(const database&) = delete;
+
+        /// \name Lifetime
+        ///@{
+        SQLNX_DETAIL_NODISCARD static expected<database> open(
+            const char* filename,
+            native::open_flags flags = native::open_flags::default_rw
+        ) noexcept;
+        ///@}
+
+        /// \name Statements
+        /// query() gives the rows of a query; execute() runs SQL whose rows aren't wanted; prepare() gives a statement
+        /// to run many times. The forms with arguments bind them to parameters 1, 2, 3, ... and take exactly one
+        /// statement: SQL holding none, or several, is a primary_code::misuse error rather than silently ignoring the
+        /// rest. So does prepare(sql). execute(sql) without arguments runs a script of semicolon-separated statements.
+        ///
+        ///     for (expected<std::tuple<std::string, int>>& user : db.query<std::string, int>(sql, 18)) { ... }
+        ///     expected<std::int64_t> count = db.query<std::int64_t>("SELECT count(*) FROM user").first();
+        ///     expected<void> added = db.execute("INSERT INTO user(name, age) VALUES(?, ?)", "Dee", 41);
+        ///
+        /// query() and execute(sql, args...) keep the statements they prepare in a cache, keyed by the exact SQL text,
+        /// so running the same SQL again doesn't prepare it again (see statement_cache_size()). prepare() always
+        /// prepares a statement of your own.
+        ///@{
+
+        /// The rows of one statement, with its parameters bound to `args`: one column per type, read as you iterate
+        /// (see sqlnx/sqlite/results.hpp). Errors, from preparing on, come out as the elements, or from first() and
+        /// all().
+        template <
+            class... T,
+            class... Args>
+        SQLNX_DETAIL_NODISCARD results<T...> query(
+            string_view sql,
+            const Args&... args
+        ) noexcept(detail::all_bind_noexcept<Args...>::value)
+        {
+            static_assert(sizeof...(T) > 0, "query<T...>: name the type of each column to read");
+            return results<T...>(lend_bound(sql, args...));
+        }
+
+        SQLNX_DETAIL_NODISCARD expected<void> execute(const char* sql) noexcept;
+
+        /// Runs one statement with its parameters bound to `args` and discards its rows: INSERT, UPDATE, DELETE.
+        template <
+            class First,
+            class... Rest>
+        SQLNX_DETAIL_NODISCARD expected<void> execute(
+            string_view sql,
+            const First& first,
+            const Rest&... rest
+        ) noexcept(detail::
+                       all_bind_noexcept<
+                           First,
+                           Rest...>::value)
+        {
+            detail::lent_statement lent = lend(sql);
+            if (!lent.stmt)
+            {
+                return expected<void>(unexpect, std::move(lent.stmt.error()));
+            }
+            expected<void> ran = lent.stmt->execute(first, rest...);
+            lent.lease.give_back(std::move(*lent.stmt));
+            return ran;
+        }
+
+        SQLNX_DETAIL_NODISCARD expected<statement> prepare(string_view sql) noexcept;
+
+        /// prepare(sql), then bind(args...): a statement ready to step, to iterate with rows() or to run again with
+        /// statement::execute().
+        template <
+            class First,
+            class... Rest>
+        SQLNX_DETAIL_NODISCARD expected<statement> prepare(
+            string_view sql,
+            const First& first,
+            const Rest&... rest
+        ) noexcept(detail::
+                       all_bind_noexcept<
+                           First,
+                           Rest...>::value)
+        {
+            return prepare_bound(sql, first, rest...);
+        }
+        ///@}
+
+        /// \name State
+        ///@{
+        std::int64_t last_insert_rowid() const noexcept;
+        std::int64_t changes() const noexcept;
+        ///@}
+
+        /// \name Settings
+        /// When another connection holds a lock, retry for up to `timeout` before a statement fails with
+        /// primary_code::busy. Zero or less turns waiting off, as it is when a database opens. A timeout longer than
+        /// SQLite takes (INT_MAX milliseconds, about 24.8 days) waits that long. Coarser durations convert:
+        /// std::chrono::seconds(5).
+        ///@{
+        SQLNX_DETAIL_NODISCARD expected<void> busy_timeout(std::chrono::milliseconds timeout) noexcept;
+        ///@}
+
+        /// \name Statement cache
+        /// How many idle statements query() and execute(sql, args...) keep for running the same SQL again: 16 when a
+        /// database opens, 0 to turn the cache off. When it is full, the statement used longest ago is finalized;
+        /// making it smaller finalizes the oldest ones at once. A statement a results still holds is not in the cache:
+        /// running the same SQL meanwhile prepares another one. Of one SQL text, at most two idle copies are kept, so
+        /// several results of the same query at once don't push the other statements out.
+        ///@{
+        void statement_cache_size(std::size_t statements) noexcept;
+        std::size_t statement_cache_size() const noexcept;
+        ///@}
+
+        /// \name Backup
+        /// See sqlnx/sqlite/backup.hpp. Copies this database over `destination`, replacing everything in it.
+        /// backup_to() copies all at once; begin_backup_to() gives a backup to copy in steps. The schemas are "main",
+        /// "temp" or the name of an attached database.
+        ///@{
+        SQLNX_DETAIL_NODISCARD expected<void> backup_to(
+            database& destination,
+            cstring_view source_schema = "main",
+            cstring_view destination_schema = "main"
+        ) noexcept;
+        SQLNX_DETAIL_NODISCARD expected<backup> begin_backup_to(
+            database& destination,
+            cstring_view source_schema = "main",
+            cstring_view destination_schema = "main"
+        ) noexcept;
+        ///@}
+
+        /// Incremental blob I/O (see sqlnx/sqlite/blob_stream.hpp): opens the value in `column` of the row `rowid` of
+        /// `table` for reading and writing in pieces. The value must be a blob or text; NULL and numbers cannot be
+        /// opened.
+        SQLNX_DETAIL_NODISCARD expected<blob_stream> open_blob(
+            cstring_view table,
+            cstring_view column,
+            std::int64_t rowid,
+            blob_access access = blob_access::read_only,
+            cstring_view schema = "main"
+        ) noexcept;
+
+        /// SQL functions written in C++, with the parameters and return type of `function` (see
+        /// sqlnx/sqlite/function.hpp). Registering the same name with the same number of parameters again replaces the
+        /// function.
+        template <class F>
+        SQLNX_DETAIL_NODISCARD expected<void> create_function(
+            cstring_view name,
+            F function,
+            native::function_flags flags = native::function_flags::none
+        ) noexcept(std::is_nothrow_move_constructible<F>::value);
+
+        /// Aggregate functions written in C++, from a class with step(...) and finish() members; with inverse(...) and
+        /// value() also a window function (see sqlnx/sqlite/aggregate.hpp). Each group works on its own copy of
+        /// `prototype`.
+        template <class Aggregate>
+        SQLNX_DETAIL_NODISCARD expected<void> create_aggregate(
+            cstring_view name,
+            Aggregate prototype,
+            native::function_flags flags = native::function_flags::none
+        ) noexcept(std::is_nothrow_move_constructible<Aggregate>::value);
+
+        /// Collations written in C++, for COLLATE and ORDER BY: `compare` takes two string_views and returns a
+        /// negative, zero or positive number, or in C++20 what operator<=> gives (see sqlnx/sqlite/collation.hpp).
+        /// Registering the same name again replaces the collation.
+        template <class Compare>
+        SQLNX_DETAIL_NODISCARD expected<void> create_collation(
+            cstring_view name,
+            Compare compare
+        ) noexcept(std::is_nothrow_move_constructible<Compare>::value);
+
+        /// The same, held by a registrations token: removed when the token ends, so the callable may refer to state
+        /// that ends with the token's scope (see sqlnx/sqlite/registrations.hpp)
+        template <class F>
+        SQLNX_DETAIL_NODISCARD expected<void> create_function(
+            cstring_view name,
+            F function,
+            registrations& scope
+        ) noexcept(std::is_nothrow_move_constructible<F>::value);
+        template <class F>
+        SQLNX_DETAIL_NODISCARD expected<void> create_function(
+            cstring_view name,
+            F function,
+            native::function_flags flags,
+            registrations& scope
+        ) noexcept(std::is_nothrow_move_constructible<F>::value);
+        template <class Aggregate>
+        SQLNX_DETAIL_NODISCARD expected<void> create_aggregate(
+            cstring_view name,
+            Aggregate prototype,
+            registrations& scope
+        ) noexcept(std::is_nothrow_move_constructible<Aggregate>::value);
+        template <class Aggregate>
+        SQLNX_DETAIL_NODISCARD expected<void> create_aggregate(
+            cstring_view name,
+            Aggregate prototype,
+            native::function_flags flags,
+            registrations& scope
+        ) noexcept(std::is_nothrow_move_constructible<Aggregate>::value);
+        template <class Compare>
+        SQLNX_DETAIL_NODISCARD expected<void> create_collation(
+            cstring_view name,
+            Compare compare,
+            registrations& scope
+        ) noexcept(std::is_nothrow_move_constructible<Compare>::value);
+
+        /// Removing what create_function, create_aggregate and create_collation registered. SQLite releases its copy of
+        /// the callable at once, so state the callable refers to may end after a successful call. A function is known
+        /// by its name and its number of parameters (an aggregate's: those of step()). Removing fails with
+        /// primary_code::busy while statements are running; removing what isn't registered succeeds and does nothing.
+        /// Statements prepared earlier are prepared again before their next step, and those using the name then fail.
+        SQLNX_DETAIL_NODISCARD expected<void> remove_function(
+            cstring_view name,
+            int argument_count
+        ) noexcept;
+        SQLNX_DETAIL_NODISCARD expected<void> remove_collation(cstring_view name) noexcept;
+
+        /// \name Hooks
+        /// See sqlnx/sqlite/hooks.hpp. One of each per connection. Setting one replaces the one before, nullptr clears
+        /// it. commit_hook: called before a transaction commits; returning false turns the commit into a rollback.
+        /// rollback_hook: after a transaction rolls back. update_hook: for every row inserted, updated or deleted, with
+        /// the kind of change, the schema, the table and the rowid. progress_handler: every `instructions` virtual
+        /// machine instructions of a statement; returning false interrupts it. With a registrations token, the hook is
+        /// cleared when the token ends.
+        ///@{
+        template <class F>
+        SQLNX_DETAIL_NODISCARD expected<void> commit_hook(F hook) noexcept(
+            std::is_nothrow_move_constructible<F>::value
+        );
+        template <class F>
+        SQLNX_DETAIL_NODISCARD expected<void> commit_hook(
+            F hook,
+            registrations& scope
+        ) noexcept(std::is_nothrow_move_constructible<F>::value);
+        SQLNX_DETAIL_NODISCARD expected<void> commit_hook(std::nullptr_t) noexcept;
+
+        template <class F>
+        SQLNX_DETAIL_NODISCARD expected<void> rollback_hook(F hook) noexcept(
+            std::is_nothrow_move_constructible<F>::value
+        );
+        template <class F>
+        SQLNX_DETAIL_NODISCARD expected<void> rollback_hook(
+            F hook,
+            registrations& scope
+        ) noexcept(std::is_nothrow_move_constructible<F>::value);
+        SQLNX_DETAIL_NODISCARD expected<void> rollback_hook(std::nullptr_t) noexcept;
+
+        template <class F>
+        SQLNX_DETAIL_NODISCARD expected<void> update_hook(F hook) noexcept(
+            std::is_nothrow_move_constructible<F>::value
+        );
+        template <class F>
+        SQLNX_DETAIL_NODISCARD expected<void> update_hook(
+            F hook,
+            registrations& scope
+        ) noexcept(std::is_nothrow_move_constructible<F>::value);
+        SQLNX_DETAIL_NODISCARD expected<void> update_hook(std::nullptr_t) noexcept;
+
+        template <class F>
+        SQLNX_DETAIL_NODISCARD expected<void> progress_handler(
+            int instructions,
+            F handler
+        ) noexcept(std::is_nothrow_move_constructible<F>::value);
+        template <class F>
+        SQLNX_DETAIL_NODISCARD expected<void> progress_handler(
+            int instructions,
+            F handler,
+            registrations& scope
+        ) noexcept(std::is_nothrow_move_constructible<F>::value);
+        SQLNX_DETAIL_NODISCARD expected<void> progress_handler(std::nullptr_t) noexcept;
+        ///@}
+
+        /// The native connection underneath, for what the typed layer does not cover
+        native::connection& native_connection() noexcept;
+        const native::connection& native_connection() const noexcept;
+
+    private:
+        native::connection db;
+        /// Created with the first hook. Declared after the connection: it clears the hooks before the connection
+        /// closes.
+        std::unique_ptr<detail::hook_slots> hooks;
+        /// Created with the first query() or execute(sql, args...). Declared after the connection: its statements are
+        /// finalized before the connection closes. Shared so that a results can give its statement back, weakly, in
+        /// case it outlives the database.
+        std::shared_ptr<detail::statement_cache> cache;
+        std::size_t cache_capacity = 16;
+
+        explicit database(native::connection&& opened) noexcept;
+
+        /// A statement for `sql` from the cache, or freshly prepared, with where to give it back
+        detail::lent_statement lend(string_view sql) noexcept;
+
+        /// lend(sql), then bind(args...); a statement that doesn't bind goes back at once
+        template <class... Args>
+        detail::lent_statement lend_bound(
+            string_view sql,
+            const Args&... args
+        ) noexcept(detail::all_bind_noexcept<Args...>::value)
+        {
+            detail::lent_statement lent = lend(sql);
+            if (lent.stmt)
+            {
+                expected<void> bound = lent.stmt->bind(args...);
+                if (!bound)
+                {
+                    lent.lease.give_back(std::move(*lent.stmt));
+                    lent.stmt = expected<statement>(unexpect, std::move(bound.error()));
+                }
+            }
+            return lent;
+        }
+
+        expected<statement> prepare_with(
+            string_view sql,
+            native::prepare_flags flags
+        ) noexcept;
+
+        /// prepare(sql), then bind(args...), for any number of arguments
+        template <class... Args>
+        expected<statement> prepare_bound(
+            string_view sql,
+            const Args&... args
+        ) noexcept(detail::all_bind_noexcept<Args...>::value)
+        {
+            expected<statement> prepared = prepare(sql);
+            if (!prepared)
+            {
+                return prepared;
+            }
+            expected<void> bound = prepared->bind(args...);
+            if (!bound)
+            {
+                return expected<statement>(unexpect, std::move(bound.error()));
+            }
+            return prepared;
+        }
+
+        error failure(native::result code) const noexcept;
+
+        /// The error for registering on a closed database
+        static error needs_open(const char* message) noexcept;
+
+        /// Hooks: installing one made by Caller from `hook`, and clearing one
+        template <
+            class Caller,
+            class F>
+        expected<void> install_hook(
+            F hook,
+            int instructions,
+            registrations* scope,
+            const char* closed_message
+        ) noexcept(std::is_nothrow_move_constructible<F>::value);
+        expected<void> clear_hook(
+            detail::registration_block::kind which,
+            const char* closed_message
+        ) noexcept;
+
+        template <class Caller>
+        native::result register_aggregate(
+            cstring_view name,
+            native::function_flags flags,
+            void* prototype,
+            std::false_type /*window*/
+        ) noexcept;
+
+        template <class Caller>
+        native::result register_aggregate(
+            cstring_view name,
+            native::function_flags flags,
+            void* prototype,
+            std::true_type /*window*/
+        ) noexcept;
+    };
+
+} // sqlite
+} // sqlnx
+
+// create_function(), create_aggregate() and create_collation() are defined with the machinery that calls them
+#include "sqlnx/sqlite/aggregate.hpp"
+#include "sqlnx/sqlite/collation.hpp"
+#include "sqlnx/sqlite/function.hpp"
+#include "sqlnx/sqlite/hooks.hpp"
+
+#endif // SQLNX_SQLITE_DATABASE_HPP

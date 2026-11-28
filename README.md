@@ -1,6 +1,6 @@
-# sqlitexx
+# sqlnx
 
-A C++ wrapper for [SQLite](https://sqlite.org) in two layers:
+SQL, noexcept: a C++ wrapper for [SQLite](https://sqlite.org), for now its only database, in two layers:
 
 - **A typed layer** where everything that can fail returns `expected<T, error>`. Calls chain with `and_then`,
   `or_else` and `transform`, values are bound and read as C++ types, and NULL and out-of-range integers are errors
@@ -10,17 +10,17 @@ A C++ wrapper for [SQLite](https://sqlite.org) in two layers:
 
 > **Status:** early development. The API may still change between commits.
 
-The [API reference](https://lallerhun.github.io/sqlitexx/) documents every class and header of the latest release.
+The [API reference](https://lallerhun.github.io/sqlnx/) documents every class and header of the latest release.
 
 ## First steps
 
-Add sqlitexx to your CMake project (see [Using sqlitexx in your project](#using-sqlitexx-in-your-project)), then
+Add sqlnx to your CMake project (see [Using sqlnx in your project](#using-sqlnx-in-your-project)), then
 include everything at once:
 
 ```cpp
-#include <sqlitexx/sqlitexx.hpp>
+#include <sqlnx/sqlite.hpp>
 
-namespace sql = sqlitexx;
+namespace sql = sqlnx::sqlite;
 ```
 
 ### 1. Open a database
@@ -35,7 +35,7 @@ if (!opened)
 sql::database& db = *opened;
 ```
 
-Every call that can fail returns an `expected<T, error>`: the value, or the error that stopped it. sqlitexx never
+Every call that can fail returns an `expected<T, error>`: the value, or the error that stopped it. sqlnx never
 throws. `":memory:"` is a database that lives only as long as `db`; give a file name to keep it on disk.
 
 ### 2. Write
@@ -70,7 +70,7 @@ struct user
     std::string name;
     sql::optional<int> age;
 };
-SQLITEXX_FIELDS(user, name, age)
+SQLNX_FIELDS(user, name, age)
 
 for (sql::expected<user>& u : db.query<user>("SELECT name, age FROM user ORDER BY id"))
 {
@@ -85,7 +85,7 @@ for (sql::expected<user>& u : db.query<user>("SELECT name, age FROM user ORDER B
 sql::expected<std::int64_t> count = db.query<std::int64_t>("SELECT count(*) FROM user").first();
 ```
 
-`SQLITEXX_FIELDS` names the members of your struct that columns go into, once, next to the struct. Each field is
+`SQLNX_FIELDS` names the members of your struct that columns go into, once, next to the struct. Each field is
 filled from the column with its name, so the order in the `SELECT` doesn't matter. For a single value, or without a
 struct, `query<T...>` takes one type per column: the value for one column, a `std::tuple` for several. Each row is
 an `expected` too, so an error in the middle of the rows can't slip through. `first()` reads just the first row, and
@@ -139,7 +139,7 @@ Carol: -1
 - **One statement at a time.** `query`, `prepare` and `execute` with arguments reject SQL holding more than one
   statement, rather than running the first and ignoring the rest. `execute(sql)` without arguments runs scripts.
 - **Views point into SQLite's memory.** A `string_view` read from a row is valid until the next step. Read a
-  `std::string` to keep the text; where a view would outlive its row, sqlitexx refuses to compile.
+  `std::string` to keep the text; where a view would outlive its row, sqlnx refuses to compile.
 - **Large tables:** to read page after page, prefer `WHERE id > ? ORDER BY id LIMIT 20` with the last id you saw
   over `OFFSET`, which SQLite still has to step through.
 
@@ -150,7 +150,7 @@ Carol: -1
 - CMake 3.21 or newer.
 - SQLite 3.37 or newer. By default CMake downloads and builds SQLite itself, so nothing needs to be installed.
 
-## Using sqlitexx in your project
+## Using sqlnx in your project
 
 Installed, through its CMake package:
 
@@ -161,12 +161,12 @@ cmake --install build --config Release --prefix <prefix>
 ```
 
 ```cmake
-find_package(sqlitexx 0.7 REQUIRED) # with <prefix> in CMAKE_PREFIX_PATH
-target_link_libraries(my_app PRIVATE sqlitexx::sqlitexx)
+find_package(sqlnx 0.8 REQUIRED) # with <prefix> in CMAKE_PREFIX_PATH
+target_link_libraries(my_app PRIVATE sqlnx::sqlite)
 ```
 
 The bundled SQLite and backports (expected-lite, and before C++17 string-view-lite and optional-lite) are installed
-with it. When sqlitexx was built with one of the `SQLITEXX_USE_SYSTEM_*` options, the package finds those again in
+with it. When sqlnx was built with one of the `SQLNX_USE_SYSTEM_*` options, the package finds those again in
 your build.
 Debug libraries carry a `d` suffix, so Debug and Release can be installed into the same prefix.
 
@@ -174,18 +174,18 @@ Or built along with your project, with CMake's `FetchContent`:
 
 ```cmake
 include(FetchContent)
-FetchContent_Declare(sqlitexx
-    GIT_REPOSITORY https://github.com/LallerHUN/sqlitexx.git
+FetchContent_Declare(sqlnx
+    GIT_REPOSITORY https://github.com/LallerHUN/sqlnx.git
     GIT_TAG main # the latest release; pin a version tag for reproducible builds
 )
-FetchContent_MakeAvailable(sqlitexx)
+FetchContent_MakeAvailable(sqlnx)
 
-target_link_libraries(my_app PRIVATE sqlitexx::sqlitexx)
+target_link_libraries(my_app PRIVATE sqlnx::sqlite)
 ```
 
-Or as a subdirectory: `add_subdirectory(sqlitexx)`.
+Or as a subdirectory: `add_subdirectory(sqlnx)`.
 
-Include everything with `#include <sqlitexx/sqlitexx.hpp>`, or the individual headers.
+Include everything with `#include <sqlnx/sqlite.hpp>`, or the individual headers.
 
 ## Building and testing
 
@@ -199,15 +199,15 @@ ctest --test-dir build --build-config Release --output-on-failure
 
 | Option | Default | Effect |
 |---|---|---|
-| `SQLITEXX_USE_SYSTEM_SQLITE` | `OFF` | Use an installed SQLite (`find_package(SQLite3)`) instead of downloading the pinned one. Turn it on when your application links SQLite itself: two copies of SQLite in one process can corrupt databases on POSIX systems. |
-| `SQLITEXX_EXPECTED` | `AUTO` | Which `expected` the typed API uses: `STD` (C++23 `std::expected`), `LITE` ([expected-lite](https://github.com/nonstd-lite/expected-lite)), or `AUTO`, which picks `std::expected` when `CMAKE_CXX_STANDARD` is 23 or newer and the standard library has it. |
-| `SQLITEXX_USE_SYSTEM_EXPECTED_LITE` | `OFF` | Use an installed expected-lite instead of downloading the pinned one. |
-| `SQLITEXX_CXX17_TYPES` | `AUTO` | Which `string_view` and `optional` the API uses: `STD` (C++17's), `LITE` ([string-view-lite](https://github.com/nonstd-lite/string-view-lite) and [optional-lite](https://github.com/nonstd-lite/optional-lite)), or `AUTO`, which picks the backports when `CMAKE_CXX_STANDARD` is below 17. |
-| `SQLITEXX_USE_SYSTEM_LITE_TYPES` | `OFF` | Use an installed string-view-lite and optional-lite instead of downloading the pinned ones. |
-| `SQLITEXX_BUILD_TESTS` | top-level only | Build the tests. |
-| `SQLITEXX_BUILD_EXAMPLES` | top-level only | Build the examples and run them as tests. |
-| `SQLITEXX_WARNINGS_AS_ERRORS` | `OFF` | Treat warnings in sqlitexx and its tests as errors. CI turns it on. |
-| `SQLITEXX_INSTALL` | top-level only | Generate the install rules and the CMake package. |
+| `SQLNX_USE_SYSTEM_SQLITE` | `OFF` | Use an installed SQLite (`find_package(SQLite3)`) instead of downloading the pinned one. Turn it on when your application links SQLite itself: two copies of SQLite in one process can corrupt databases on POSIX systems. |
+| `SQLNX_EXPECTED` | `AUTO` | Which `expected` the typed API uses: `STD` (C++23 `std::expected`), `LITE` ([expected-lite](https://github.com/nonstd-lite/expected-lite)), or `AUTO`, which picks `std::expected` when `CMAKE_CXX_STANDARD` is 23 or newer and the standard library has it. |
+| `SQLNX_USE_SYSTEM_EXPECTED_LITE` | `OFF` | Use an installed expected-lite instead of downloading the pinned one. |
+| `SQLNX_CXX17_TYPES` | `AUTO` | Which `string_view` and `optional` the API uses: `STD` (C++17's), `LITE` ([string-view-lite](https://github.com/nonstd-lite/string-view-lite) and [optional-lite](https://github.com/nonstd-lite/optional-lite)), or `AUTO`, which picks the backports when `CMAKE_CXX_STANDARD` is below 17. |
+| `SQLNX_USE_SYSTEM_LITE_TYPES` | `OFF` | Use an installed string-view-lite and optional-lite instead of downloading the pinned ones. |
+| `SQLNX_BUILD_TESTS` | top-level only | Build the tests. |
+| `SQLNX_BUILD_EXAMPLES` | top-level only | Build the examples and run them as tests. |
+| `SQLNX_WARNINGS_AS_ERRORS` | `OFF` | Treat warnings in sqlnx and its tests as errors. CI turns it on. |
+| `SQLNX_INSTALL` | top-level only | Generate the install rules and the CMake package. |
 
 For an offline build, unpack the dependencies yourself and point CMake at them with
 `-DFETCHCONTENT_SOURCE_DIR_SQLITE3=<dir>` and `-DFETCHCONTENT_SOURCE_DIR_EXPECTED_LITE=<dir>`.
@@ -225,9 +225,9 @@ For an offline build, unpack the dependencies yourself and point CMake at them w
 | `cstring_view` | as text | like `string_view`, and always followed by a `'\0'`, so `c_str()` can go to C functions |
 | `const char*` | as text, or NULL for `nullptr` | not readable |
 | `nullptr` | NULL | not readable |
-| `sqlitexx::blob` (`std::vector<unsigned char>`) | as a blob | |
+| `sqlnx::sqlite::blob` (`std::vector<unsigned char>`) | as a blob | |
 | `std::vector<std::byte>` (C++17) | as a blob | |
-| `sqlitexx::zeroblob{size}` | as a blob of `size` zero bytes, without building it in memory | not readable |
+| `sqlnx::sqlite::zeroblob{size}` | as a blob of `size` zero bytes, without building it in memory | not readable |
 | `std::span<const std::byte>`, `std::span<const unsigned char>` (C++20) | as a blob, without copying it first | a view into SQLite's memory until the next step |
 | `std::span` of writable bytes, or with a fixed extent (C++20) | as a blob | not readable |
 | `std::u8string`, `std::u8string_view`, `u8cstring_view` (C++20) | as UTF-8 text | like their `char` counterparts |
@@ -235,11 +235,11 @@ For an offline build, unpack the dependencies yourself and point CMake at them w
 | `optional<T>` | NULL when empty | NULL becomes an empty optional |
 
 Reading NULL into anything other than `optional<T>` is an error. Your own types plug in by specializing
-`sqlitexx::value_traits`; [sqlitexx/value.hpp](include/sqlitexx/value.hpp) shows how.
+`sqlnx::sqlite::value_traits`; [sqlnx/sqlite/value.hpp](include/sqlnx/sqlite/value.hpp) shows how.
 
 ### Errors
 
-`sqlitexx::error` holds SQLite's extended result code and its message. Errors sqlitexx finds itself use SQLite codes
+`sqlnx::sqlite::error` holds SQLite's extended result code and its message. Errors sqlnx finds itself use SQLite codes
 too, so one kind of check covers both.
 
 An ignored error is a compiler warning: every call that returns an `expected` is `[[nodiscard]]` from C++17 (and
@@ -247,14 +247,14 @@ with Clang from C++11), so `db.execute("DELETE FROM t");` without looking at the
 meant, say so: `static_cast<void>(db.execute("DELETE FROM t"));`. The chaining helpers (`first<T>()`,
 `execute_with(...)`, ...) are marked too, as one that isn't passed to `and_then` does nothing.
 
-| Primary code | Meaning in sqlitexx |
+| Primary code | Meaning in sqlnx |
 |---|---|
 | `done` | `first()` found no row |
 | `mismatch` | NULL read into a non-optional type, or an integer that doesn't fit |
-| `nomem` | Out of memory, in SQLite or in sqlitexx (see [Out of memory](#out-of-memory)) |
+| `nomem` | Out of memory, in SQLite or in sqlnx (see [Out of memory](#out-of-memory)) |
 | `misuse` | `prepare()`, `query()` or `execute(sql, args...)` was given no SQL statement, or more than one |
 
-`sqlitexx::on(code, handler)` handles one kind of error inside `or_else` and passes every other error on unchanged.
+`sqlnx::sqlite::on(code, handler)` handles one kind of error inside `or_else` and passes every other error on unchanged.
 `code` is either of these:
 
 - A primary code, such as `native::primary_code::constraint`, which matches every extended code under it.
@@ -275,8 +275,8 @@ auto added = db.execute("INSERT INTO user(name) VALUES(?)", "Alice")
 
 ### Out of memory
 
-With exceptions enabled, no sqlitexx call lets `std::bad_alloc` out. Running out of memory, whether in SQLite or in
-sqlitexx copying text, blobs or error messages, is an error with `primary_code::nomem`:
+With exceptions enabled, no sqlnx call lets `std::bad_alloc` out. Running out of memory, whether in SQLite or in
+sqlnx copying text, blobs or error messages, is an error with `primary_code::nomem`:
 
 ```cpp
 sql::expected<std::string> name = stmt->column<std::string>(0);   // noexcept
@@ -294,7 +294,7 @@ if (!name && name.error().primary() == sql::native::primary_code::nomem)
 - `create_function`, `create_aggregate`, `create_collation` and the chaining helpers take what they keep by value.
   Passing an lvalue copies it where you call them, in your code; the calls themselves only move, and are `noexcept`
   when moving can't throw. So nothing they keep refers to your variables.
-- sqlitexx catches only its own allocations. What your code throws reaches you unchanged, `std::bad_alloc` included:
+- sqlnx catches only its own allocations. What your code throws reaches you unchanged, `std::bad_alloc` included:
   your traits, your callbacks, the copy constructors of what you register. The statement stays usable afterwards.
   The one exception is code that SQLite calls, where nothing may unwind: in SQL functions and aggregates every
   exception becomes an error of the SQL call, and in a collation, which can't fail, it ends the program.
@@ -389,7 +389,7 @@ struct user
     sql::optional<int> age;
     std::int64_t id = 0;
 };
-SQLITEXX_FIELDS(user, name, age, id)   // namespace scope, in the struct's namespace, no semicolon
+SQLNX_FIELDS(user, name, age, id)   // namespace scope, in the struct's namespace, no semicolon
 
 sql::expected<user> alice = db.query<user>("SELECT * FROM user WHERE id = ?", 1).first();
 ```
@@ -404,11 +404,11 @@ sql::expected<user> alice = db.query<user>("SELECT * FROM user WHERE id = ?", 1)
   `first<user>()` and `for_each_row<user>(...)`. It is read on its own, not alongside other types.
 - A struct with a `string_view` member counts as a view, with the same compile-time checks.
 - The struct must be default-constructible, and must not also have `value_traits`. The macro takes up to 32 members.
-- `SQLITEXX_FIELDS` defines a function found by argument-dependent lookup. Write it by hand to read a column of
+- `SQLNX_FIELDS` defines a function found by argument-dependent lookup. Write it by hand to read a column of
   another name; from C++14 on that is short:
 
 ```cpp
-inline auto sqlitexx_fields(const user*)
+inline auto sqlnx_fields(const user*)
 {
     return sql::fields(sql::field("name", &user::name), sql::field("years", &user::age));
 }
@@ -427,7 +427,7 @@ struct point
 };
 
 template <>
-struct sqlitexx::record_traits<point>
+struct sqlnx::sqlite::record_traits<point>
 {
     static sql::expected<point> read(const sql::statement& row)
     {
@@ -442,7 +442,7 @@ struct sqlitexx::record_traits<point>
 - `build(factory)` instead calls `factory(values...)`. The factory may return an `expected`, to reject a row with an
   error of its own.
 - A record is read wherever a row is read, on its own, and must not also have `value_traits`; the structs that
-  `SQLITEXX_FIELDS` names are records through the default `record_traits`.
+  `SQLNX_FIELDS` names are records through the default `record_traits`.
 - A hand-written record whose `read()` keeps views into the row says so with `static constexpr bool reads_view =
   true;`, for the same compile-time checks as a view.
 
@@ -524,7 +524,7 @@ sql::expected<std::string> hello = db.prepare("SELECT greet('Alice')").and_then(
   optimize the calls and use the function in an index.
 
 Your own types work as arguments and results when their `value_traits` are templates, as in
-[sqlitexx/value.hpp](include/sqlitexx/value.hpp).
+[sqlnx/sqlite/value.hpp](include/sqlnx/sqlite/value.hpp).
 
 ### Aggregate and window functions
 
@@ -702,7 +702,7 @@ for (sql::expected<std::tuple<std::string, int>>& user : select.rows<std::string
 
 ### Transactions
 
-`sqlitexx::in_transaction` runs a function in a transaction: it commits when the function returns a value and rolls
+`sqlnx::sqlite::in_transaction` runs a function in a transaction: it commits when the function returns a value and rolls
 back when it returns an error.
 
 ```cpp
@@ -713,7 +713,7 @@ sql::expected<std::int64_t> id = sql::in_transaction(db, [&] {
 });
 ```
 
-For more control, `sqlitexx::transaction::begin(db, mode)` gives a transaction object that rolls back when it goes
+For more control, `sqlnx::sqlite::transaction::begin(db, mode)` gives a transaction object that rolls back when it goes
 out of scope unless `commit()` succeeded. `mode` is `transaction_mode::deferred` (the default), `immediate` or
 `exclusive`, as in SQL's `BEGIN`. When `commit()` fails, `active()` tells whether the transaction is still open: it
 is after a deferred constraint violation or `SQLITE_BUSY`, so you can fix the data or retry, while some other errors
@@ -784,19 +784,19 @@ Zero turns waiting off again, as it is when a database opens.
 
 ### Standard types or backports
 
-`sqlitexx::expected` is `std::expected` or expected-lite's, depending on `SQLITEXX_EXPECTED`, and
-`sqlitexx::string_view` and `sqlitexx::optional` are the C++17 ones or string-view-lite's and optional-lite's,
-depending on `SQLITEXX_CXX17_TYPES`. CMake decides once and passes the choice to everything that links sqlitexx, so
-the library and your code always agree on which types the API uses. Write `sqlitexx::expected`,
-`sqlitexx::unexpected`, `sqlitexx::unexpect`, `sqlitexx::string_view`, `sqlitexx::optional` and `sqlitexx::nullopt`,
-and your code works with either.
+`sqlnx::sqlite::expected` is `std::expected` or expected-lite's, depending on `SQLNX_EXPECTED`, and
+`sqlnx::sqlite::string_view` and `sqlnx::sqlite::optional` are the C++17 ones or string-view-lite's and optional-lite's,
+depending on `SQLNX_CXX17_TYPES`. CMake decides once and passes the choice to everything that links sqlnx, so
+the library and your code always agree on which types the API uses. Write `sqlnx::sqlite::expected`,
+`sqlnx::sqlite::unexpected`, `sqlnx::sqlite::unexpect`, `sqlnx::sqlite::string_view`, `sqlnx::sqlite::optional` and
+`sqlnx::sqlite::nullopt`, and your code works with either.
 
 The backports convert from and to `std::string` like the standard types do, but not from or to `std::string_view` and
-`std::optional`: in a C++17 program built with `SQLITEXX_CXX17_TYPES=LITE`, convert explicitly.
+`std::optional`: in a C++17 program built with `SQLNX_CXX17_TYPES=LITE`, convert explicitly.
 
 ## The native layer
 
-`sqlitexx::native::connection` and `sqlitexx::native::statement` own a `sqlite3*` and a `sqlite3_stmt*`. Their
+`sqlnx::sqlite::native::connection` and `sqlnx::sqlite::native::statement` own a `sqlite3*` and a `sqlite3_stmt*`. Their
 functions keep the C names (`prepare`, `step`, `bind_int64`, `column_text`, ...), return a `native::result`, and
 never throw. Differences from the C API:
 
@@ -814,7 +814,7 @@ clang-format can't check, and how pull requests get in.
 
 ## License
 
-sqlitexx is distributed under the [Boost Software License, Version 1.0](LICENSE).
+sqlnx is distributed under the [Boost Software License, Version 1.0](LICENSE).
 
 It uses [SQLite](https://sqlite.org/copyright.html), which is in the public domain, and
 [expected-lite](https://github.com/nonstd-lite/expected-lite),
