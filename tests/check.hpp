@@ -1,5 +1,5 @@
-#ifndef SQLITEXX_TESTS_CHECK_HPP
-#define SQLITEXX_TESTS_CHECK_HPP
+#ifndef SQLNX_TESTS_CHECK_HPP
+#define SQLNX_TESTS_CHECK_HPP
 
 // Minimal test checks that stay on in release builds; a real test framework comes later.
 
@@ -64,4 +64,4 @@ inline int summary()
 
 #define CHECK(expression) ::test::check((expression), #expression, __LINE__)
 
-#endif // SQLITEXX_TESTS_CHECK_HPP
+#endif // SQLNX_TESTS_CHECK_HPP

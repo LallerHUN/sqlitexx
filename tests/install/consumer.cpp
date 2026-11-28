@@ -1,13 +1,13 @@
-// Uses an installed sqlitexx through find_package: the headers, the library, the bundled or system SQLite and
-// expected all have to arrive through the sqlitexx::sqlitexx target.
+// Uses an installed sqlnx through find_package: the headers, the library, the bundled or system SQLite and
+// expected all have to arrive through the sqlnx::sqlite target.
 
-#include <sqlitexx/sqlitexx.hpp>
+#include <sqlnx/sqlite.hpp>
 
 #include <cstdio>
 
 int main()
 {
-    namespace sql = sqlitexx;
+    namespace sql = sqlnx::sqlite;
 
     sql::expected<sql::database> db = sql::database::open(":memory:");
     if (!db)
@@ -35,6 +35,6 @@ int main()
         std::printf("query failed\n");
         return 1;
     }
-    std::printf("installed sqlitexx works: %d\n", *answer);
+    std::printf("installed sqlnx works: %d\n", *answer);
     return 0;
 }

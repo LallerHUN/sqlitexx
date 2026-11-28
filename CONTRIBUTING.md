@@ -1,4 +1,4 @@
-# Contributing to sqlitexx
+# Contributing to sqlnx
 
 Thanks for helping. This page covers how to build and test, the code rules that tools can't check for you, and how
 changes get in.
@@ -9,13 +9,13 @@ it.
 ## Building and testing
 
 ```shell
-cmake -S . -B build -DSQLITEXX_WARNINGS_AS_ERRORS=ON
+cmake -S . -B build -DSQLNX_WARNINGS_AS_ERRORS=ON
 cmake --build build --config Debug
 ctest --test-dir build --build-config Debug --output-on-failure
 ```
 
 CMake downloads SQLite and the backports (expected-lite, string-view-lite, optional-lite) on the first configure; see
-the README for the options and for offline builds. Build with `SQLITEXX_WARNINGS_AS_ERRORS=ON` locally too: CI does,
+the README for the options and for offline builds. Build with `SQLNX_WARNINGS_AS_ERRORS=ON` locally too: CI does,
 and a warning fails the pull request.
 
 CI also builds:
@@ -23,8 +23,8 @@ CI also builds:
 - with C++11, C++14, C++17, C++20 and C++23 (MSVC from C++14), so with both the backports and the standard types;
 - with exceptions disabled (`-fno-exceptions`, or `/EHs-c- -D_HAS_EXCEPTIONS=0` on MSVC);
 - with Clang's AddressSanitizer and UndefinedBehaviorSanitizer;
-- against the system SQLite (`SQLITEXX_USE_SYSTEM_SQLITE=ON`);
-- the installed package, used from [tests/install](tests/install) through `find_package(sqlitexx)`.
+- against the system SQLite (`SQLNX_USE_SYSTEM_SQLITE=ON`);
+- the installed package, used from [tests/install](tests/install) through `find_package(sqlnx)`.
 
 If you change something that only one of those touches, try it locally the same way; the workflow in
 [.github/workflows/ci.yml](.github/workflows/ci.yml) shows the exact flags.
@@ -38,13 +38,13 @@ tools/check.sh clang-asan format # only these; --list shows the names
 ```
 
 It needs gcc, clang, cmake, ninja, the SQLite development files (`libsqlite3-dev`) and clang-format 22.1.3. Build
-directories are kept in `~/.cache/sqlitexx-check`, so a second run only rebuilds what changed. In WSL, run it on the
-Windows checkout (`wsl --cd /mnt/c/<path to sqlitexx> -e bash tools/check.sh`); the builds still go to the Linux
+directories are kept in `~/.cache/sqlnx-check`, so a second run only rebuilds what changed. In WSL, run it on the
+Windows checkout (`wsl --cd /mnt/c/<path to sqlnx> -e bash tools/check.sh`); the builds still go to the Linux
 file system, where they are fast.
 
 ### The reference
 
-The [API reference](https://lallerhun.github.io/sqlitexx/) is generated from the `///` comments in the headers by
+The [API reference](https://lallerhun.github.io/sqlnx/) is generated from the `///` comments in the headers by
 Doxygen, with the doxygen-awesome-css theme. [tools/docs.sh](tools/docs.sh) builds it into `build/docs/html`, the
 same way the [docs workflow](.github/workflows/docs.yml) does:
 
@@ -65,12 +65,12 @@ are for the implementation and stay out of the reference.
 
 | Path | What |
 |---|---|
-| `include/sqlitexx/` | Public headers. `sqlitexx.hpp` includes all of them. |
-| `include/sqlitexx/native/` | The native layer: the one-to-one mirror of the C API. |
-| `include/sqlitexx/detail/` | Public-header internals that users must not rely on. |
+| `include/sqlnx/sqlite/` | Public headers. `sqlnx.hpp` includes all of them. |
+| `include/sqlnx/sqlite/native/` | The native layer: the one-to-one mirror of the C API. |
+| `include/sqlnx/sqlite/detail/` | Public-header internals that users must not rely on. |
 | `src/` | Implementation files. |
 | `src/detail/` | Private headers. |
-| `src/impl_sqlitexx.hpp` | The implementation files' single include. It only includes other headers. |
+| `src/impl_sqlnx.hpp` | The implementation files' single include. It only includes other headers. |
 | `tests/` | One test program per area (`native_test`, `typed_test`, ...). |
 | `examples/` | Programs shown in the README. CI builds and runs them, so keep them in step with the README. |
 | `docs/` | The Doxygen configuration of the API reference (see [The reference](#the-reference)). |
@@ -115,38 +115,38 @@ grouped by what they do (lifetime, binding, reading, ...), with a short comment 
 
 ### C++ standard
 
-sqlitexx supports C++11 and newer, and CI builds every standard from C++11 to C++23. Library code, tests and examples
+sqlnx supports C++11 and newer, and CI builds every standard from C++11 to C++23. Library code, tests and examples
 are all C++11:
 
 - no `if constexpr` (use tag dispatch or overloads), fold expressions, structured bindings, `auto` return type
   deduction, generic lambdas, inline variables, class template argument deduction or `namespace a::b`;
 - nothing from C++14 either: no `std::make_unique`, `std::enable_if_t` and the other `_t` aliases, `constexpr`
   functions with more than a return statement, variable templates, or digit separators;
-- take vocabulary types from sqlitexx's aliases (`sqlitexx::string_view`, `sqlitexx::optional`,
-  `sqlitexx::expected`), never from `std::` directly: before C++17 (or C++23 for `expected`) they are backports;
+- take vocabulary types from sqlnx's aliases (`sqlnx::sqlite::string_view`, `sqlnx::sqlite::optional`,
+  `sqlnx::sqlite::expected`), never from `std::` directly: before C++17 (or C++23 for `expected`) they are backports;
 - helpers that standard C++ only has from C++14 or C++17 on live in `detail/utility.hpp` (`index_sequence`,
   `apply`).
 
 Tests and examples follow the same rules, since CI builds them as C++11 too.
 
 Support for types from newer standards (`std::byte`, `std::span`, `char8_t`) lives in headers of its own
-([value_bytes.hpp](include/sqlitexx/value_bytes.hpp), [value_char8.hpp](include/sqlitexx/value_char8.hpp)), behind
-feature-test macros such as `__cpp_lib_span`. Code behind such a macro may use the standard it tests for. It only adds
-new `value_traits` specializations and never changes an existing declaration, so translation units compiled with
-different standards still agree on every type they share.
+([value_bytes.hpp](include/sqlnx/sqlite/value_bytes.hpp), [value_char8.hpp](include/sqlnx/sqlite/value_char8.hpp)),
+behind feature-test macros such as `__cpp_lib_span`. Code behind such a macro may use the standard it tests for. It
+only adds new `value_traits` specializations and never changes an existing declaration, so translation units compiled
+with different standards still agree on every type they share.
 
 ### Errors, never exceptions
 
-- sqlitexx never throws. Functions that can fail return `expected<T, error>` (typed layer) or `native::result`
+- sqlnx never throws. Functions that can fail return `expected<T, error>` (typed layer) or `native::result`
   (native layer). No `throw`, no `try`: CI builds with exceptions disabled.
-- Errors sqlitexx detects itself use SQLite result codes too (`done`, `mismatch`, `misuse`), so callers check one
+- Errors sqlnx detects itself use SQLite result codes too (`done`, `mismatch`, `misuse`), so callers check one
   kind of code. The README's Errors section lists their meanings; add a line there when you introduce a new case.
 - Destructors and moves are `noexcept`.
 
 ### Headers
 
 - Public headers never include `sqlite3.h`. The native layer forward-declares `sqlite3` and `sqlite3_stmt`, and
-  `src/native/result.cpp` checks with `static_assert` that sqlitexx's copies of SQLite's constants still match.
+  `src/native/result.cpp` checks with `static_assert` that sqlnx's copies of SQLite's constants still match.
 - Write `(std::numeric_limits<T>::max)()`, with the parentheses: `<windows.h>` without `NOMINMAX` defines `min` and
   `max` macros. `typed_test.cpp` includes `<windows.h>` first to keep this honest.
 
@@ -189,7 +189,7 @@ failure paths too: the error code, and the message when it matters.
 A release goes through a short-lived release branch between `develop` and `main`, so that `develop` can keep moving
 and fixes found during the release land in one place.
 
-1. Cut `release/vX.Y.Z` from `develop`. Set the version in `CMakeLists.txt` and wherever `find_package(sqlitexx X.Y)`
+1. Cut `release/vX.Y.Z` from `develop`. Set the version in `CMakeLists.txt` and wherever `find_package(sqlnx X.Y)`
    appears (README, `tests/install`, the install comment in `CMakeLists.txt`). In CHANGELOG.md, turn
    `## [Unreleased]` into `## [X.Y.Z] - YYYY-MM-DD` with a new empty `[Unreleased]` above it, and update the
    compare links at the bottom. Push.
@@ -221,5 +221,5 @@ fix is already on `develop`, cherry-pick it.
 
 ## License
 
-sqlitexx is under the [Boost Software License 1.0](LICENSE). By contributing, you agree that your contribution is
+sqlnx is under the [Boost Software License 1.0](LICENSE). By contributing, you agree that your contribution is
 distributed under the same license.

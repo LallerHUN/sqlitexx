@@ -1,11 +1,13 @@
-#include "impl_sqlitexx.hpp"
+#include "impl_sqlnx.hpp"
 
-namespace sqlitexx
+namespace sqlnx
 {
-namespace native
+namespace sqlite
 {
-    // The public headers do not include sqlite3.h, so they repeat its constants. Keep them honest.
-    // clang-format off: these are assertions, not the function declarations clang-format takes them for
+    namespace native
+    {
+        // The public headers do not include sqlite3.h, so they repeat its constants. Keep them honest.
+        // clang-format off: these are assertions, not the function declarations clang-format takes them for
     static_assert(static_cast<int>(primary_code::ok) == SQLITE_OK, "");
     static_assert(static_cast<int>(primary_code::error) == SQLITE_ERROR, "");
     static_assert(static_cast<int>(primary_code::busy) == SQLITE_BUSY, "");
@@ -288,12 +290,13 @@ namespace native
     static_assert(static_cast<int>(value_type::text) == SQLITE_TEXT, "");
     static_assert(static_cast<int>(value_type::blob) == SQLITE_BLOB, "");
     static_assert(static_cast<int>(value_type::null) == SQLITE_NULL, "");
-    // clang-format on
+        // clang-format on
 
-    const char* result::errstr() const noexcept
-    {
-        return sqlite3_errstr(value);
-    }
+        const char* result::errstr() const noexcept
+        {
+            return sqlite3_errstr(value);
+        }
 
-} // native
-} // sqlitexx
+    } // native
+} // sqlite
+} // sqlnx

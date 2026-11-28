@@ -1,4 +1,4 @@
-# sqlitexx code style. Needs clang-format 20 or newer.
+# sqlnx code style. Needs clang-format 20 or newer.
 #
 # The layout should not depend on the length of names: renaming something must not re-indent its neighbours. So long
 # lists break right after the opening bracket, one item per line, the closing bracket on its own line, and nothing is

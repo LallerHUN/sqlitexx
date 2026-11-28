@@ -1,7 +1,7 @@
 // Tests for the hooks: commit_hook, rollback_hook, update_hook and progress_handler.
 
 #include "check.hpp"
-#include "sqlitexx/sqlitexx.hpp"
+#include "sqlnx/sqlite.hpp"
 
 #include <cstdint>
 #include <string>
@@ -10,18 +10,18 @@
 
 #if defined(__cpp_exceptions) || defined(__EXCEPTIONS) || defined(_CPPUNWIND)
 #include <stdexcept>
-#define SQLITEXX_TEST_EXCEPTIONS 1
+#define SQLNX_TEST_EXCEPTIONS 1
 #else
-#define SQLITEXX_TEST_EXCEPTIONS 0
+#define SQLNX_TEST_EXCEPTIONS 0
 #endif
 
-using sqlitexx::cstring_view;
-using sqlitexx::database;
-using sqlitexx::expected;
-using sqlitexx::registrations;
-using sqlitexx::native::extended_code;
-using sqlitexx::native::primary_code;
-using sqlitexx::native::update_kind;
+using sqlnx::sqlite::cstring_view;
+using sqlnx::sqlite::database;
+using sqlnx::sqlite::expected;
+using sqlnx::sqlite::registrations;
+using sqlnx::sqlite::native::extended_code;
+using sqlnx::sqlite::native::primary_code;
+using sqlnx::sqlite::native::update_kind;
 
 namespace
 {
@@ -49,7 +49,7 @@ expected<T> select(
     const char* sql
 )
 {
-    return db.prepare(sql).and_then(sqlitexx::first<T>());
+    return db.prepare(sql).and_then(sqlnx::sqlite::first<T>());
 }
 
 // A row change as an update hook reports it
@@ -357,7 +357,7 @@ void test_registrations()
     {
         registrations scope;
         CHECK(db.update_hook([](update_kind, cstring_view, cstring_view, std::int64_t) {}, scope).has_value());
-        expected<sqlitexx::statement> running = db.prepare("SELECT name FROM item");
+        expected<sqlnx::sqlite::statement> running = db.prepare("SELECT name FROM item");
         CHECK(running.has_value());
         expected<bool> row = running->step();
         CHECK(row && *row);
@@ -403,7 +403,7 @@ void test_cleared_by_nullptr()
     CHECK(commits == 1);
 }
 
-#if SQLITEXX_TEST_EXCEPTIONS
+#if SQLNX_TEST_EXCEPTIONS
 void test_exceptions()
 {
     database db = open_items();
@@ -439,7 +439,7 @@ int count_native(void* user_data)
 void test_native()
 {
     database db = open_items();
-    sqlitexx::native::connection& native = db.native_connection();
+    sqlnx::sqlite::native::connection& native = db.native_connection();
     int first = 0;
     int second = 0;
     CHECK(native.commit_hook(&count_native, &first) == nullptr);
@@ -477,13 +477,13 @@ struct sees_changes
 };
 
 // clang-format off
-static_assert(sqlitexx::detail::is_yes_no_hook<no_arguments, true>::value, "a void commit hook");
-static_assert(sqlitexx::detail::is_yes_no_hook<says_yes, true>::value, "a bool commit hook");
-static_assert(!sqlitexx::detail::is_yes_no_hook<no_arguments, false>::value, "a progress handler must answer");
-static_assert(sqlitexx::detail::is_yes_no_hook<says_yes, false>::value, "a progress handler");
-static_assert(!sqlitexx::detail::is_yes_no_hook<takes_an_int, true>::value, "hooks take no arguments");
-static_assert(sqlitexx::detail::is_hook_callable<sees_changes, sqlitexx::detail::update_hook_signature>::value, "an update hook");
-static_assert(!sqlitexx::detail::is_hook_callable<no_arguments, sqlitexx::detail::update_hook_signature>::value, "not an update hook");
+static_assert(sqlnx::sqlite::detail::is_yes_no_hook<no_arguments, true>::value, "a void commit hook");
+static_assert(sqlnx::sqlite::detail::is_yes_no_hook<says_yes, true>::value, "a bool commit hook");
+static_assert(!sqlnx::sqlite::detail::is_yes_no_hook<no_arguments, false>::value, "a progress handler must answer");
+static_assert(sqlnx::sqlite::detail::is_yes_no_hook<says_yes, false>::value, "a progress handler");
+static_assert(!sqlnx::sqlite::detail::is_yes_no_hook<takes_an_int, true>::value, "hooks take no arguments");
+static_assert(sqlnx::sqlite::detail::is_hook_callable<sees_changes, sqlnx::sqlite::detail::update_hook_signature>::value, "an update hook");
+static_assert(!sqlnx::sqlite::detail::is_hook_callable<no_arguments, sqlnx::sqlite::detail::update_hook_signature>::value, "not an update hook");
 // clang-format on
 } // anonymous
 
@@ -497,7 +497,7 @@ int main()
     test_moving_the_database();
     test_registrations();
     test_cleared_by_nullptr();
-#if SQLITEXX_TEST_EXCEPTIONS
+#if SQLNX_TEST_EXCEPTIONS
     test_exceptions();
 #endif
     test_native();

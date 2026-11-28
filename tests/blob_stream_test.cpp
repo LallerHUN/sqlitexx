@@ -1,7 +1,7 @@
 // Tests for database::open_blob and blob_stream: reading and writing blobs in pieces.
 
 #include "check.hpp"
-#include "sqlitexx/sqlitexx.hpp"
+#include "sqlnx/sqlite.hpp"
 
 #include <array>
 #include <cstdint>
@@ -10,19 +10,19 @@
 #include <utility>
 #include <vector>
 
-#if SQLITEXX_CPLUSPLUS >= 202002L && defined(__has_include)
+#if SQLNX_CPLUSPLUS >= 202002L && defined(__has_include)
 #if __has_include(<span>)
 #include <span>
 #endif
 #endif
 
-using sqlitexx::blob;
-using sqlitexx::blob_access;
-using sqlitexx::blob_stream;
-using sqlitexx::database;
-using sqlitexx::expected;
-using sqlitexx::zeroblob;
-using sqlitexx::native::primary_code;
+using sqlnx::sqlite::blob;
+using sqlnx::sqlite::blob_access;
+using sqlnx::sqlite::blob_stream;
+using sqlnx::sqlite::database;
+using sqlnx::sqlite::expected;
+using sqlnx::sqlite::zeroblob;
+using sqlnx::sqlite::native::primary_code;
 
 namespace
 {
@@ -39,7 +39,7 @@ database open_files(
         return database();
     }
     CHECK(db->execute("CREATE TABLE file(id INTEGER PRIMARY KEY, data BLOB)").has_value());
-    expected<sqlitexx::statement> insert = db->prepare("INSERT INTO file(data) VALUES(?)");
+    expected<sqlnx::sqlite::statement> insert = db->prepare("INSERT INTO file(data) VALUES(?)");
     CHECK(insert && insert->execute(first).has_value());
     CHECK(insert && insert->execute(second).has_value());
     return std::move(*db);
@@ -61,8 +61,8 @@ blob stored(
 )
 {
     return db.prepare("SELECT data FROM file WHERE id = ?")
-        .and_then(sqlitexx::bind_values(id))
-        .and_then(sqlitexx::first<blob>())
+        .and_then(sqlnx::sqlite::bind_values(id))
+        .and_then(sqlnx::sqlite::first<blob>())
         .value_or(blob());
 }
 
@@ -115,10 +115,10 @@ void test_write_into_reserved_space()
 
     // zeroblob reserves the space without building it in memory
     CHECK(db.prepare("INSERT INTO file(id, data) VALUES(3, ?)")
-              .and_then(sqlitexx::execute_with(zeroblob{3000}))
+              .and_then(sqlnx::sqlite::execute_with(zeroblob{3000}))
               .has_value());
     expected<std::string> type = db.prepare("SELECT typeof(data) || length(data) FROM file WHERE id = 3")
-                                     .and_then(sqlitexx::first<std::string>());
+                                     .and_then(sqlnx::sqlite::first<std::string>());
     CHECK(type && *type == "blob3000");
 
     const blob data = counting(3000);
@@ -228,76 +228,76 @@ void test_open_errors()
 }
 // Which containers count as bytes
 static_assert(
-    sqlitexx::detail::is_readable_bytes<std::vector<unsigned char>>::value,
+    sqlnx::sqlite::detail::is_readable_bytes<std::vector<unsigned char>>::value,
     ""
 );
 static_assert(
-    sqlitexx::detail::is_readable_bytes<std::string>::value,
+    sqlnx::sqlite::detail::is_readable_bytes<std::string>::value,
     ""
 );
 static_assert(
-    sqlitexx::detail::is_readable_bytes<std::array<
+    sqlnx::sqlite::detail::is_readable_bytes<std::array<
         char,
         4>>::value,
     ""
 );
 static_assert(
-    sqlitexx::detail::is_readable_bytes<sqlitexx::string_view>::value,
+    sqlnx::sqlite::detail::is_readable_bytes<sqlnx::sqlite::string_view>::value,
     ""
 );
 static_assert(
-    !sqlitexx::detail::is_readable_bytes<std::vector<int>>::value,
+    !sqlnx::sqlite::detail::is_readable_bytes<std::vector<int>>::value,
     "wider elements depend on the machine"
 );
 static_assert(
-    sqlitexx::detail::is_growable_bytes<std::vector<unsigned char>>::value,
+    sqlnx::sqlite::detail::is_growable_bytes<std::vector<unsigned char>>::value,
     ""
 );
 static_assert(
-    sqlitexx::detail::is_growable_bytes<std::string>::value,
+    sqlnx::sqlite::detail::is_growable_bytes<std::string>::value,
     ""
 );
 static_assert(
-    !sqlitexx::detail::is_growable_bytes<const std::vector<unsigned char>>::value,
+    !sqlnx::sqlite::detail::is_growable_bytes<const std::vector<unsigned char>>::value,
     "const can't grow"
 );
 static_assert(
-    !sqlitexx::detail::is_growable_bytes<std::array<
+    !sqlnx::sqlite::detail::is_growable_bytes<std::array<
         unsigned char,
         4>>::value,
     ""
 );
 static_assert(
-    sqlitexx::detail::is_fixed_bytes<std::array<
+    sqlnx::sqlite::detail::is_fixed_bytes<std::array<
         unsigned char,
         4>>::value,
     ""
 );
 static_assert(
-    !sqlitexx::detail::is_fixed_bytes<const std::array<
+    !sqlnx::sqlite::detail::is_fixed_bytes<const std::array<
         unsigned char,
         4>>::value,
     "const can't be filled"
 );
 static_assert(
-    !sqlitexx::detail::is_fixed_bytes<std::vector<unsigned char>>::value,
+    !sqlnx::sqlite::detail::is_fixed_bytes<std::vector<unsigned char>>::value,
     "a vector grows instead"
 );
 static_assert(
-    !sqlitexx::detail::is_byte_array_element<char>::value,
+    !sqlnx::sqlite::detail::is_byte_array_element<char>::value,
     "a string literal would write its zero"
 );
 static_assert(
-    sqlitexx::detail::is_byte_array_element<unsigned char>::value,
+    sqlnx::sqlite::detail::is_byte_array_element<unsigned char>::value,
     ""
 );
 
 void test_containers()
 {
     database db = open_files(blob(), blob());
-    CHECK(
-        db.prepare("INSERT INTO file(id, data) VALUES(3, ?)").and_then(sqlitexx::execute_with(zeroblob{16})).has_value()
-    );
+    CHECK(db.prepare("INSERT INTO file(id, data) VALUES(3, ?)")
+              .and_then(sqlnx::sqlite::execute_with(zeroblob{16}))
+              .has_value());
 
     {
         expected<blob_stream> out = db.open_blob("file", "data", 3, blob_access::read_write);
@@ -316,7 +316,7 @@ void test_containers()
         CHECK(out->write(text, 3).has_value());
         CHECK(out->write(raw).has_value());
         CHECK(out->write(raw, 2).has_value());
-        CHECK(out->write(sqlitexx::string_view("!!")).has_value());
+        CHECK(out->write(sqlnx::sqlite::string_view("!!")).has_value());
         CHECK(out->position() == 16);
 
         // A count larger than the container is an error, before anything is written

@@ -1,25 +1,25 @@
 // Tests for database::busy_timeout: waiting for another connection's lock.
 
 #include "check.hpp"
-#include "sqlitexx/sqlitexx.hpp"
+#include "sqlnx/sqlite.hpp"
 
 #include <chrono>
 #include <cstdio>
 #include <utility>
 
-using sqlitexx::database;
-using sqlitexx::expected;
-using sqlitexx::native::primary_code;
+using sqlnx::sqlite::database;
+using sqlnx::sqlite::expected;
+using sqlnx::sqlite::native::primary_code;
 
 namespace
 {
 // Two connections need a database file; it is created in the working directory and removed afterwards
-const char* const path = "sqlitexx_busy_timeout_test.sqlite";
+const char* const path = "sqlnx_busy_timeout_test.sqlite";
 
 void remove_database()
 {
     std::remove(path);
-    std::remove("sqlitexx_busy_timeout_test.sqlite-journal");
+    std::remove("sqlnx_busy_timeout_test.sqlite-journal");
 }
 
 database open_file()

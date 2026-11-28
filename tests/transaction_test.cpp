@@ -1,17 +1,17 @@
 // Tests for transaction and in_transaction.
 
 #include "check.hpp"
-#include "sqlitexx/sqlitexx.hpp"
+#include "sqlnx/sqlite.hpp"
 
 #include <cstdint>
 #include <utility>
 
-using sqlitexx::database;
-using sqlitexx::error;
-using sqlitexx::expected;
-using sqlitexx::transaction;
-using sqlitexx::transaction_mode;
-using sqlitexx::native::primary_code;
+using sqlnx::sqlite::database;
+using sqlnx::sqlite::error;
+using sqlnx::sqlite::expected;
+using sqlnx::sqlite::transaction;
+using sqlnx::sqlite::transaction_mode;
+using sqlnx::sqlite::native::primary_code;
 
 namespace
 {
@@ -29,7 +29,7 @@ database open_empty()
 
 std::int64_t count_items(database& db)
 {
-    return db.prepare("SELECT count(*) FROM item").and_then(sqlitexx::first<std::int64_t>()).value_or(-1);
+    return db.prepare("SELECT count(*) FROM item").and_then(sqlnx::sqlite::first<std::int64_t>()).value_or(-1);
 }
 
 bool in_autocommit(database& db)
@@ -147,12 +147,12 @@ void test_in_transaction()
     database db = open_empty();
 
     // Success commits and passes the value on
-    expected<std::int64_t> id = sqlitexx::in_transaction(
+    expected<std::int64_t> id = sqlnx::sqlite::in_transaction(
         db,
         [&]
         {
             return db.prepare("INSERT INTO item(name) VALUES(?)")
-                .and_then(sqlitexx::execute_with("a"))
+                .and_then(sqlnx::sqlite::execute_with("a"))
                 .transform(
                     [&]
                     {
@@ -166,7 +166,7 @@ void test_in_transaction()
     CHECK(count_items(db) == 1);
 
     // An error rolls back everything the body did and is passed on unchanged
-    expected<void> failed = sqlitexx::in_transaction(
+    expected<void> failed = sqlnx::sqlite::in_transaction(
         db,
         [&]
         {
@@ -187,7 +187,7 @@ void test_in_transaction()
     expected<transaction> outer = transaction::begin(db);
     CHECK(outer.has_value());
     bool ran = false;
-    expected<void> nested = sqlitexx::in_transaction(
+    expected<void> nested = sqlnx::sqlite::in_transaction(
         db,
         [&]
         {

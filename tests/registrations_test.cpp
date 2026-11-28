@@ -1,19 +1,19 @@
-// Tests for sqlitexx::registrations: a token that removes functions, aggregates and collations when it ends.
+// Tests for sqlnx::sqlite::registrations: a token that removes functions, aggregates and collations when it ends.
 
 #include "check.hpp"
-#include "sqlitexx/sqlitexx.hpp"
+#include "sqlnx/sqlite.hpp"
 
 #include <cstdint>
 #include <string>
 #include <utility>
 
-using sqlitexx::database;
-using sqlitexx::expected;
-using sqlitexx::registrations;
-using sqlitexx::statement;
-using sqlitexx::string_view;
-using sqlitexx::native::function_flags;
-using sqlitexx::native::primary_code;
+using sqlnx::sqlite::database;
+using sqlnx::sqlite::expected;
+using sqlnx::sqlite::registrations;
+using sqlnx::sqlite::statement;
+using sqlnx::sqlite::string_view;
+using sqlnx::sqlite::native::function_flags;
+using sqlnx::sqlite::native::primary_code;
 
 namespace
 {
@@ -45,7 +45,7 @@ expected<T> select(
     const char* sql
 )
 {
-    return db.prepare(sql).and_then(sqlitexx::first<T>());
+    return db.prepare(sql).and_then(sqlnx::sqlite::first<T>());
 }
 
 // Counts how many callables ended: the copy SQLite calls, not the moved-from ones

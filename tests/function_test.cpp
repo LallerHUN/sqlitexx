@@ -1,7 +1,7 @@
 // Tests for database::create_function: SQL functions written in C++.
 
 #include "check.hpp"
-#include "sqlitexx/sqlitexx.hpp"
+#include "sqlnx/sqlite.hpp"
 
 #include <cstdint>
 #include <memory>
@@ -10,23 +10,23 @@
 
 #if defined(__cpp_exceptions) || defined(__EXCEPTIONS) || defined(_CPPUNWIND)
 #include <stdexcept>
-#define SQLITEXX_TEST_EXCEPTIONS 1
+#define SQLNX_TEST_EXCEPTIONS 1
 #else
-#define SQLITEXX_TEST_EXCEPTIONS 0
+#define SQLNX_TEST_EXCEPTIONS 0
 #endif
 
-using sqlitexx::blob;
-using sqlitexx::cstring_view;
-using sqlitexx::database;
-using sqlitexx::error;
-using sqlitexx::expected;
-using sqlitexx::nullopt;
-using sqlitexx::optional;
-using sqlitexx::statement;
-using sqlitexx::unexpect;
-using sqlitexx::native::extended_code;
-using sqlitexx::native::function_flags;
-using sqlitexx::native::primary_code;
+using sqlnx::sqlite::blob;
+using sqlnx::sqlite::cstring_view;
+using sqlnx::sqlite::database;
+using sqlnx::sqlite::error;
+using sqlnx::sqlite::expected;
+using sqlnx::sqlite::nullopt;
+using sqlnx::sqlite::optional;
+using sqlnx::sqlite::statement;
+using sqlnx::sqlite::unexpect;
+using sqlnx::sqlite::native::extended_code;
+using sqlnx::sqlite::native::function_flags;
+using sqlnx::sqlite::native::primary_code;
 
 // Own types: one with traits written as templates, which work for statements and SQL functions alike, and one with
 // traits written for native::statement only, as before SQL functions existed
@@ -40,56 +40,59 @@ struct label
     std::string text;
 };
 
-namespace sqlitexx
+namespace sqlnx
 {
-template <>
-struct value_traits<celsius>
+namespace sqlite
 {
-    template <class Target>
-    static native::result bind(
-        Target& stmt,
-        int index,
-        const celsius& value
-    )
+    template <>
+    struct value_traits<celsius>
     {
-        return stmt.bind_double(index, value.degrees);
-    }
+        template <class Target>
+        static native::result bind(
+            Target& stmt,
+            int index,
+            const celsius& value
+        )
+        {
+            return stmt.bind_double(index, value.degrees);
+        }
 
-    template <class Source>
-    static expected<celsius> read(
-        const Source& stmt,
-        int index
-    )
-    {
-        celsius value;
-        value.degrees = stmt.column_double(index);
-        return value;
-    }
-};
+        template <class Source>
+        static expected<celsius> read(
+            const Source& stmt,
+            int index
+        )
+        {
+            celsius value;
+            value.degrees = stmt.column_double(index);
+            return value;
+        }
+    };
 
-template <>
-struct value_traits<label>
-{
-    static native::result bind(
-        native::statement& stmt,
-        int index,
-        const label& value
-    )
+    template <>
+    struct value_traits<label>
     {
-        return stmt.bind_text(index, string_view(value.text));
-    }
+        static native::result bind(
+            native::statement& stmt,
+            int index,
+            const label& value
+        )
+        {
+            return stmt.bind_text(index, string_view(value.text));
+        }
 
-    static expected<label> read(
-        const native::statement& stmt,
-        int index
-    )
-    {
-        label value;
-        value.text = std::string(stmt.column_text(index)->c_str());
-        return value;
-    }
-};
-} // sqlitexx
+        static expected<label> read(
+            const native::statement& stmt,
+            int index
+        )
+        {
+            label value;
+            value.text = std::string(stmt.column_text(index)->c_str());
+            return value;
+        }
+    };
+} // sqlite
+} // sqlnx
 
 namespace
 {
@@ -111,7 +114,7 @@ expected<T> select(
     const char* sql
 )
 {
-    return db.prepare(sql).and_then(sqlitexx::first<T>());
+    return db.prepare(sql).and_then(sqlnx::sqlite::first<T>());
 }
 
 int twice(int value)
@@ -243,7 +246,7 @@ void test_errors()
                         return expected<double>(
                             unexpect,
                             error(
-                                sqlitexx::native::result(static_cast<int>(extended_code::constraint_check)),
+                                sqlnx::sqlite::native::result(static_cast<int>(extended_code::constraint_check)),
                                 "checked_sqrt: negative argument"
                             )
                         );
@@ -366,7 +369,7 @@ void test_own_types()
     label tag;
     tag.text = "kept";
     expected<label> echoed =
-        db.prepare("SELECT ?").and_then(sqlitexx::bind_values(tag)).and_then(sqlitexx::first<label>());
+        db.prepare("SELECT ?").and_then(sqlnx::sqlite::bind_values(tag)).and_then(sqlnx::sqlite::first<label>());
     CHECK(echoed && echoed->text == "kept");
 }
 
@@ -497,7 +500,7 @@ void test_remove()
     CHECK(!not_open && not_open.error().primary() == primary_code::misuse);
 }
 
-#if SQLITEXX_TEST_EXCEPTIONS
+#if SQLNX_TEST_EXCEPTIONS
 void test_exceptions()
 {
     database db = open_memory();
@@ -526,7 +529,7 @@ int main()
     test_deterministic();
     test_move_only();
     test_remove();
-#if SQLITEXX_TEST_EXCEPTIONS
+#if SQLNX_TEST_EXCEPTIONS
     test_exceptions();
 #endif
     return test::summary();

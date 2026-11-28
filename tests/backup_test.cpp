@@ -1,23 +1,23 @@
 // Tests for database::backup_to and begin_backup_to: copying a whole database into another.
 
 #include "check.hpp"
-#include "sqlitexx/sqlitexx.hpp"
+#include "sqlnx/sqlite.hpp"
 
 #include <cstdint>
 #include <cstdio>
 #include <string>
 #include <utility>
 
-using sqlitexx::backup;
-using sqlitexx::blob;
-using sqlitexx::database;
-using sqlitexx::expected;
-using sqlitexx::native::primary_code;
+using sqlnx::sqlite::backup;
+using sqlnx::sqlite::blob;
+using sqlnx::sqlite::database;
+using sqlnx::sqlite::expected;
+using sqlnx::sqlite::native::primary_code;
 
 namespace
 {
 // Saving to a file needs one; it is created in the working directory and removed afterwards
-const char* const path = "sqlitexx_backup_test.sqlite";
+const char* const path = "sqlnx_backup_test.sqlite";
 
 database open(const char* filename)
 {
@@ -32,7 +32,7 @@ database open(const char* filename)
 
 std::int64_t count_items(database& db)
 {
-    return db.prepare("SELECT count(*) FROM item").and_then(sqlitexx::first<std::int64_t>()).value_or(-1);
+    return db.prepare("SELECT count(*) FROM item").and_then(sqlnx::sqlite::first<std::int64_t>()).value_or(-1);
 }
 
 // A source with `rows` rows of 1 KiB each, so that it spans many pages
@@ -40,7 +40,7 @@ database filled(int rows)
 {
     database db = open(":memory:");
     CHECK(db.execute("CREATE TABLE item(id INTEGER PRIMARY KEY, data BLOB)").has_value());
-    expected<sqlitexx::statement> insert = db.prepare("INSERT INTO item(data) VALUES(?)");
+    expected<sqlnx::sqlite::statement> insert = db.prepare("INSERT INTO item(data) VALUES(?)");
     CHECK(insert.has_value());
     for (int i = 0; insert && i < rows; ++i)
     {

@@ -1,7 +1,7 @@
 // Tests for database::create_collation and connection::create_collation: collations written in C++.
 
 #include "check.hpp"
-#include "sqlitexx/sqlitexx.hpp"
+#include "sqlnx/sqlite.hpp"
 
 #include <cstddef>
 #include <cstring>
@@ -10,12 +10,12 @@
 #include <string>
 #include <utility>
 
-using sqlitexx::database;
-using sqlitexx::expected;
-using sqlitexx::statement;
-using sqlitexx::string_view;
-using sqlitexx::native::extended_code;
-using sqlitexx::native::primary_code;
+using sqlnx::sqlite::database;
+using sqlnx::sqlite::expected;
+using sqlnx::sqlite::statement;
+using sqlnx::sqlite::string_view;
+using sqlnx::sqlite::native::extended_code;
+using sqlnx::sqlite::native::primary_code;
 
 namespace
 {
@@ -38,7 +38,7 @@ std::string joined(
 {
     std::string text;
     expected<void> done = db.prepare(sql).and_then(
-        sqlitexx::for_each_row<std::string>(
+        sqlnx::sqlite::for_each_row<std::string>(
             [&text](const std::string& value)
             {
                 text += text.empty() ? value : "," + value;
@@ -112,10 +112,11 @@ void test_equality()
     database db = open_fruit();
     CHECK(db.create_collation("nocase_ascii", &compare_nocase).has_value());
 
-    expected<int> same = db.prepare("SELECT 'APPLE' = 'apple' COLLATE nocase_ascii").and_then(sqlitexx::first<int>());
+    expected<int> same =
+        db.prepare("SELECT 'APPLE' = 'apple' COLLATE nocase_ascii").and_then(sqlnx::sqlite::first<int>());
     CHECK(same && *same == 1);
     expected<int> count = db.prepare("SELECT count(*) FROM fruit WHERE name = 'apple' COLLATE nocase_ascii")
-                              .and_then(sqlitexx::first<int>());
+                              .and_then(sqlnx::sqlite::first<int>());
     CHECK(count && *count == 1);
 
     // In a column definition, UNIQUE follows the collation
@@ -145,7 +146,8 @@ void test_texts_arrive_whole()
     ).has_value());
 
     // UTF-8 arrives as bytes: an e with an acute accent is two
-    expected<int> order = db.prepare("SELECT '' < 'caf\xC3\xA9' COLLATE measuring").and_then(sqlitexx::first<int>());
+    expected<int> order =
+        db.prepare("SELECT '' < 'caf\xC3\xA9' COLLATE measuring").and_then(sqlnx::sqlite::first<int>());
     CHECK(order && *order == 1);
     CHECK(longest == 5);
     CHECK(saw_empty);
@@ -365,7 +367,7 @@ int compare_native(
 void test_native()
 {
     database db = open_fruit();
-    sqlitexx::native::connection& native = db.native_connection();
+    sqlnx::sqlite::native::connection& native = db.native_connection();
     int calls = 0;
     CHECK(native.create_collation("bytes", &calls, &compare_native, nullptr).ok());
     CHECK(joined(db, "SELECT name FROM fruit ORDER BY name COLLATE bytes") == "Apple,apricot,banana,cherry");
@@ -377,11 +379,11 @@ void test_native()
 
 // What is and isn't a collation, at compile time
 // clang-format off
-static_assert(sqlitexx::detail::is_collation<decltype(&compare_nocase)>::value, "an int-returning function");
-static_assert(sqlitexx::detail::is_collation<reversed>::value, "a function object");
-static_assert(!sqlitexx::detail::is_collation<int (*)(int)>::value, "wrong parameters");
-static_assert(!sqlitexx::detail::is_collation<bool (*)(string_view, string_view)>::value, "a less-than predicate");
-static_assert(!sqlitexx::detail::is_collation<unsigned (*)(string_view, string_view)>::value, "can't be negative");
+static_assert(sqlnx::sqlite::detail::is_collation<decltype(&compare_nocase)>::value, "an int-returning function");
+static_assert(sqlnx::sqlite::detail::is_collation<reversed>::value, "a function object");
+static_assert(!sqlnx::sqlite::detail::is_collation<int (*)(int)>::value, "wrong parameters");
+static_assert(!sqlnx::sqlite::detail::is_collation<bool (*)(string_view, string_view)>::value, "a less-than predicate");
+static_assert(!sqlnx::sqlite::detail::is_collation<unsigned (*)(string_view, string_view)>::value, "can't be negative");
 // clang-format on
 } // anonymous
 

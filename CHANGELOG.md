@@ -1,10 +1,30 @@
 # Changelog
 
-All notable changes to sqlitexx are listed here. The format is based on
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and sqlitexx follows
+All notable changes to sqlnx, called sqlitexx before 0.8.0, are listed here. The format is based on
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and sqlnx follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html): before 1.0, a minor version may break the API.
 
 ## [Unreleased]
+
+### Changed
+
+- The library is renamed from sqlitexx to sqlnx ("SQL, noexcept"), because about ten other C++ SQLite wrappers are
+  called sqlitexx. SQLite is its only database for now and gets a namespace of its own: everything is in
+  `sqlnx::sqlite`, except the field list for records (`sqlnx::field`, `sqlnx::fields`, `SQLNX_FIELDS`), which
+  doesn't depend on a database. Nothing else changes; to upgrade, rename:
+
+  | sqlitexx | sqlnx |
+  |---|---|
+  | `namespace sqlitexx` | `namespace sqlnx::sqlite` |
+  | `#include <sqlitexx/sqlitexx.hpp>` | `#include <sqlnx/sqlite.hpp>` |
+  | `#include <sqlitexx/database.hpp>` and the others | `#include <sqlnx/sqlite/database.hpp>` |
+  | `#include <sqlitexx/fields.hpp>` | `#include <sqlnx/fields.hpp>` |
+  | `SQLITEXX_FIELDS(...)`, `sqlitexx_fields()` | `SQLNX_FIELDS(...)`, `sqlnx_fields()` |
+  | `sqlitexx::field`, `sqlitexx::fields` | `sqlnx::field`, `sqlnx::fields` |
+  | `find_package(sqlitexx)`, `sqlitexx::sqlitexx` | `find_package(sqlnx)`, `sqlnx::sqlite` |
+  | the `SQLITEXX_*` CMake options and macros | `SQLNX_*` |
+
+  The repository moves to https://github.com/LallerHUN/sqlnx and the reference to https://lallerhun.github.io/sqlnx/.
 
 ## [0.7.1] - 2026-11-26
 

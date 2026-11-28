@@ -69,7 +69,7 @@ jobs:
             cxx_standard: 23
             cmake_args: -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++
 
-          # Sanitizers on sqlitexx's C++ code only: SQLite itself calls functions through cast pointers, which
+          # Sanitizers on sqlnx's C++ code only: SQLite itself calls functions through cast pointers, which
           # -fsanitize=function would report.
           - name: Linux Clang ASan+UBSan
             os: ubuntu-latest
@@ -89,7 +89,7 @@ jobs:
               "-DCMAKE_CXX_FLAGS=-fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer"
               "-DCMAKE_EXE_LINKER_FLAGS=-fsanitize=address,undefined"
 
-          # sqlitexx never throws, so it must build and work with exceptions switched off: with expected-lite (C++17)
+          # sqlnx never throws, so it must build and work with exceptions switched off: with expected-lite (C++17)
           # and with std::expected (C++23) on each compiler family, and with every backport on GCC (C++11). MSVC switches use '-', which it
           # accepts like '/', so Git Bash on the Windows runner does not rewrite them as paths.
           - name: Windows MSVC no exceptions C++17
@@ -127,7 +127,7 @@ jobs:
             build_type: Release
             cxx_standard: 17
             system_sqlite: true
-            cmake_args: -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DSQLITEXX_USE_SYSTEM_SQLITE=ON
+            cmake_args: -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DSQLNX_USE_SYSTEM_SQLITE=ON
 
           - name: macOS AppleClang
             os: macos-latest
@@ -148,7 +148,7 @@ jobs:
           -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
           -DCMAKE_CXX_STANDARD=${{ matrix.cxx_standard }}
           -DCMAKE_CXX_STANDARD_REQUIRED=ON
-          -DSQLITEXX_WARNINGS_AS_ERRORS=ON
+          -DSQLNX_WARNINGS_AS_ERRORS=ON
           ${{ matrix.cmake_args }}
 
       - name: Build
@@ -157,7 +157,7 @@ jobs:
       - name: Test
         run: ctest --test-dir build --build-config ${{ matrix.build_type }} --output-on-failure
 
-  # Installs sqlitexx and builds tests/install, a separate project that finds it with find_package like a user would
+  # Installs sqlnx and builds tests/install, a separate project that finds it with find_package like a user would
   install:
     name: Install ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
@@ -185,7 +185,7 @@ jobs:
             system_sqlite: true
             cmake_args: >-
               -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++
-              -DCMAKE_CXX_STANDARD=23 -DSQLITEXX_USE_SYSTEM_SQLITE=ON
+              -DCMAKE_CXX_STANDARD=23 -DSQLNX_USE_SYSTEM_SQLITE=ON
             consumer_args: -DCMAKE_CXX_COMPILER=g++
 
           - name: macOS AppleClang
@@ -198,10 +198,10 @@ jobs:
         if: matrix.system_sqlite
         run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
 
-      - name: Build and install sqlitexx
+      - name: Build and install sqlnx
         shell: bash
         run: |
-          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DSQLITEXX_BUILD_TESTS=OFF -DSQLITEXX_BUILD_EXAMPLES=OFF ${{ matrix.cmake_args }}
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DSQLNX_BUILD_TESTS=OFF -DSQLNX_BUILD_EXAMPLES=OFF ${{ matrix.cmake_args }}
           cmake --build build --config Release --parallel
           cmake --install build --config Release --prefix "${{ runner.temp }}/prefix"
 
