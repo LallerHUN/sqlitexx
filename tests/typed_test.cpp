@@ -574,6 +574,67 @@ void test_prepare_with_arguments()
     CHECK(!two && two.error().primary() == primary_code::misuse);
 }
 
+void test_argument_count()
+{
+    database db = open_users();
+
+    // Too few arguments would leave the rest NULL: a count of 0 here, and an UPDATE that changes nothing
+    expected<std::int64_t> adults =
+        db.query<std::int64_t>("SELECT count(*) FROM user WHERE age >= ? AND name = ?", 18).first();
+    CHECK(!adults && adults.error().primary() == primary_code::range);
+    CHECK(
+        !adults
+        && adults.error().message()
+            == "1 argument for 2 parameters: give one value per parameter, or bind "
+               "some with bind_at() or bind_named()"
+    );
+    expected<void> update = db.execute("UPDATE user SET age = ? WHERE id = ?", 99);
+    CHECK(!update && update.error().primary() == primary_code::range);
+    expected<int> age = db.query<int>("SELECT age FROM user WHERE id = 1").first();
+    CHECK(age && *age == 31);
+    expected<statement> prepared = db.prepare("SELECT name FROM user WHERE age >= ? AND age < ?", 18);
+    CHECK(!prepared && prepared.error().primary() == primary_code::range);
+
+    // No arguments at all for SQL with parameters, and too many
+    expected<int> none = db.query<int>("SELECT age FROM user WHERE name = ?").first();
+    CHECK(!none && none.error().primary() == primary_code::range);
+    expected<void> extra = db.execute("DELETE FROM user WHERE id = ?", 1, 2);
+    CHECK(!extra && extra.error().primary() == primary_code::range);
+    CHECK(
+        !extra
+        && extra.error().message()
+            == "2 arguments for 1 parameter: give one value per parameter, or bind "
+               "some with bind_at() or bind_named()"
+    );
+
+    // The statement goes back to the cache unharmed: the same SQL with the right arguments works
+    expected<std::int64_t> counted =
+        db.query<std::int64_t>("SELECT count(*) FROM user WHERE age >= ? AND name = ?", 18, "Alice").first();
+    CHECK(counted && *counted == 1);
+
+    // Numbered parameters count up to the highest number, and a number used twice is one parameter
+    expected<int> twice = db.query<int>("SELECT ?1 + ?1", 2).first();
+    CHECK(twice && *twice == 4);
+    expected<int> gap = db.query<int>("SELECT ?2", 5).first();
+    CHECK(!gap && gap.error().primary() == primary_code::range);
+
+    // statement::bind and statement::execute check it too; bind_at and bind_named bind one parameter each
+    expected<statement> select = db.prepare("SELECT name FROM user WHERE age >= ? AND age < ?");
+    CHECK(select.has_value());
+    expected<void> bound = select->bind(18);
+    CHECK(!bound && bound.error().primary() == primary_code::range);
+    CHECK(select->bind_at(1, 18).has_value());
+    CHECK(select->bind_at(2, 40).has_value());
+    expected<std::string> name = select->first<std::string>();
+    CHECK(name && *name == "Alice");
+    expected<statement> insert = db.prepare("INSERT INTO user(name, age) VALUES(?, ?)");
+    CHECK(insert.has_value());
+    expected<void> ran = insert->execute("Carol");
+    CHECK(!ran && ran.error().primary() == primary_code::range);
+    expected<std::int64_t> count = db.query<std::int64_t>("SELECT count(*) FROM user").first();
+    CHECK(count && *count == 2);
+}
+
 void test_empty_statement()
 {
     // Default-constructed and moved-from statements: every read is a misuse error, none reaches SQLite
@@ -620,6 +681,7 @@ int main()
     test_execute_with_arguments();
     test_prepare_with_arguments();
     test_empty_statement();
+    test_argument_count();
 
     return test::summary();
 }

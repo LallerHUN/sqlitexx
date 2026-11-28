@@ -59,8 +59,8 @@ if (!insert || !insert->execute("Bob", sql::optional<int>()))
 ```
 
 `execute(sql)` runs SQL without values, even several statements at once. `execute(sql, args...)` binds the
-arguments to the `?` placeholders in order, so values never need to be pasted into the SQL text. `and_then` runs
-the next step only when the previous one succeeded.
+arguments to the `?` placeholders in order, one per placeholder, so values never need to be pasted into the SQL
+text. `and_then` runs the next step only when the previous one succeeded.
 
 ### 3. Read
 
@@ -133,7 +133,8 @@ Carol: -1
 
 - **Parameters count from 1, columns from 0.** That is SQLite's own numbering: the first `?` is parameter 1
   (`bind_at(1, value)`), the first column of a row is column 0 (`column<T>(0)`). The calls that take all values at
-  once (`execute(sql, args...)`, `query<T...>`) handle the numbering for you.
+  once (`execute(sql, args...)`, `query<T...>`) handle the numbering for you, and need exactly one value per
+  parameter: one missing is a `range` error, not a NULL.
 - **NULL goes only into `optional<T>`.** Reading NULL into an `int` or a `std::string` is an error, not a silent 0
   or empty string. Integers that don't fit their type are errors too.
 - **One statement at a time.** `query`, `prepare` and `execute` with arguments reject SQL holding more than one
@@ -251,6 +252,7 @@ meant, say so: `static_cast<void>(db.execute("DELETE FROM t"));`. The chaining h
 |---|---|
 | `done` | `first()` found no row |
 | `mismatch` | NULL read into a non-optional type, or an integer that doesn't fit |
+| `range` | The values don't match the statement: arguments in order that aren't one per parameter, a record parameter without a name or a field, a parameter `record_binder::done()` finds unbound, or a column name the statement doesn't have, a record field's included |
 | `nomem` | Out of memory, in SQLite or in sqlnx (see [Out of memory](#out-of-memory)) |
 | `misuse` | `prepare()`, `query()` or `execute(sql, args...)` was given no SQL statement, or more than one |
 

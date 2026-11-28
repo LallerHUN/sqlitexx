@@ -25,6 +25,15 @@ All notable changes to sqlnx, called sqlitexx before 0.8.0, are listed here. The
   | the `SQLITEXX_*` CMake options and macros | `SQLNX_*` |
 
   The repository moves to https://github.com/LallerHUN/sqlnx and the reference to https://lallerhun.github.io/sqlnx/.
+- Arguments bound in order must be one per parameter. Too few used to leave the rest NULL without an error, so
+  `db.execute("UPDATE user SET age = ? WHERE id = ?", 99)` succeeded and changed nothing; now it is a `range` error,
+  as too many already was. This covers `query`, `execute(sql, args...)`, `prepare(sql, args...)` and
+  `statement::bind` and `execute`. To bind only some parameters, use `bind_at` or `bind_named`.
+
+### Fixed
+
+- The README's Errors table and `error.hpp` didn't list `range`, the code of every mismatch between values and
+  statement.
 
 ## [0.7.1] - 2026-11-26
 
